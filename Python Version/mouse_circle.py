@@ -3,12 +3,13 @@ import time
 import math
 import pyautogui 
 import threading
+import keyboard  # For global hotkeys
 
 class MouseApp:
     def __init__(self, root):
         self.root = root 
         self.root.title("Mouse Circle Mover")
-        self.root.geometry("300x200")
+        self.root.geometry("1000x1000")
         
         self.is_running = False # variable to stop the loop 
      
@@ -16,6 +17,9 @@ class MouseApp:
         
         self.label = tk.Label(root, text = "Mouse Controller", font=("Helvetica", 16))
         self.label.pack(pady = 10)
+        
+        self.instruction = tk.Label(root, text = "Shortcut: Press "ESC" to Stop.\nClick 'Continue Work' to stop.", font=("Helvetica",12))
+        self.instruction.pack(pady = 10)
         
         self.start_button = tk.Button(root, text = "Start Free Time !", font = ("Helvetica", 14), command = self.start_moving, bg = "green", fg = "white", width = 15)
         self.start_button.pack(pady = 10)
@@ -25,11 +29,14 @@ class MouseApp:
         
         self.status = tk.Label(root, text = "Status: Idle", fg="blue")
         self.status.pack(pady = 10)
+        
+        #also done to ensure that it can used when the window is minimized
+        keyboard.add_hotkey('esc', self.stop_movement)  # Bind ESC key to stop movement
     
     
     def move_logic(self):
         
-        radius = 100
+        radius = 150
         stops = 60 
         
         cx, cy = pyautogui.position() # get current mouse position
@@ -44,9 +51,9 @@ class MouseApp:
                 y = cy + radius * math.sin(angle)
                 
                 
-                pyautogui.moveTo(x, y, duration=0.1)
+                pyautogui.moveTo(x, y)
             
-            time.sleep(0.5) # wait before starting the next circle
+            time.sleep(0.05) # wait before starting the next circle
             
     def start_moving(self):
         if not self.is_running:
