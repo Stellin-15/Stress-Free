@@ -9,7 +9,7 @@ class MouseApp:
     def __init__(self, root):
         self.root = root 
         self.root.title("Mouse Circle Mover")
-        self.root.geometry("1000x1000")
+        self.root.geometry("500x500")
         
         self.is_running = False # variable to stop the loop 
      
@@ -18,7 +18,7 @@ class MouseApp:
         self.label = tk.Label(root, text = "Mouse Controller", font=("Helvetica", 16))
         self.label.pack(pady = 10)
         
-        self.instruction = tk.Label(root, text = "Shortcut: Press "ESC" to Stop.\nClick 'Continue Work' to stop.", font=("Helvetica",12))
+        self.instruction = tk.Label(root, text = "Shortcut: Press 'ESC' to Stop.\nClick 'Continue Work' to stop.", font=("Helvetica",12))
         self.instruction.pack(pady = 10)
         
         self.start_button = tk.Button(root, text = "Start Free Time !", font = ("Helvetica", 14), command = self.start_moving, bg = "green", fg = "white", width = 15)
