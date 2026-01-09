@@ -3,9 +3,21 @@ import time
 import math
 import pyautogui 
 import threading
-import keyboard  # For global hotkeys
+import keyboard # For global hotkeys
+import customtkinter as ctk
 
-class MouseApp:
+# --- CONFIGURATION & COLORS ---
+# You can change these Hex codes to try different themes!
+BG_COLOR = "#1A1A1B"        # Main Background
+CARD_COLOR = "#2D2D2E"      # Inner container color
+ACCENT_COLOR = "#3B82F6"    # Primary Button (Blue)
+ACCENT_HOVER = "#2563EB"    # Button Hover state
+STOP_COLOR = "#EF4444"      # Stop Button (Red)
+
+ctk.set_appearance_mode("Dark") 
+ctk.set_default_color_theme("blue")
+
+class MouseApp(ctk.CTk):
     def __init__(self, root):
         self.root = root 
         self.root.title("Mouse Circle Mover")
