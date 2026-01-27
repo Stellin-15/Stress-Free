@@ -87,7 +87,7 @@ class ProfessionalMouseApp(ctk.CTk):
             self.status_dot.configure(text="● RUNNING", text_color="#10B981")
             self.start_btn.configure(state="disabled")
             threading.Thread(target=self.move_logic, daemon=True).start()
-
+ 
     def stop_movement(self):
         self.is_running = False
         self.status_dot.configure(text="● Stopped", text_color="gray")
