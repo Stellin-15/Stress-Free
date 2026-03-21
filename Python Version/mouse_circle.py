@@ -9,36 +9,50 @@ from version import APP_VERSION, APP_NAME
 from updater import check_for_updates
 from PIL import Image, ImageDraw
 import pystray
+import pywinstyles
 
 pyautogui.FAILSAFE = False
 
-# ── Color Palette ─────────────────────────────────────────────────────────────
-BG_COLOR     = "#0A0A0B"
-CARD_COLOR   = "#111113"
-BORDER_COLOR = "#1E1E22"
-ACCENT_COLOR = "#00C896"
-ACCENT_HOVER = "#00A87E"
-STOP_COLOR   = "#FF4757"
-STOP_HOVER   = "#CC2233"
-DIM_TEXT     = "#4A4A55"
-BRIGHT_TEXT  = "#E8E8EE"
+# ── Cyberpunk Palette ──────────────────────────────────────────────────────────
+BG_COLOR    = "#0D0D1A"    # dark navy — readable, not pitch black
+CARD_COLOR  = "#13132A"
+BORDER_DIM  = "#22224A"
+NEON_YLW    = "#E8FF00"    # electric yellow — primary accent
+NEON_CYAN   = "#00EEFF"    # cyan — secondary / info
+NEON_RED    = "#FF0040"    # stop / danger
+DIM_TEXT    = "#9090BB"    # muted labels
+MID_TEXT    = "#FFFFFF"    # primary readable text — pure white
+BRIGHT_TEXT = "#FFFFFF"
 
-# ── Funny idle messages ───────────────────────────────────────────────────────
-IDLE_MESSAGES = [
-    "Maximizing synergies...",
-    "Crushing it.",
-    "In the zone.",
-    "Optimizing output...",
-    "Definitely working.",
-    "Very productive.",
-    "Generating value.",
-    "100% focused.",
-    "Delivering results.",
-    "Peak performance.",
+# Glow colour layers (yellow, outermost → brightest)
+G1 = "#2A2E00"
+G2 = "#686E00"
+G3 = "#B8CC00"
+G4 = "#E8FF00"
+
+GLITCH_CHARS = "!#$%@*<>[]{}01アイウエカキクケ▓▒░◆◈"
+
+IDLE_MSGS = [
+    "MAXIMIZING SYNERGIES...",
+    "CRUSHING IT.",
+    "IN THE ZONE.",
+    "OPTIMIZING OUTPUT...",
+    "DEFINITELY WORKING.",
+    "VERY PRODUCTIVE.",
+    "GENERATING VALUE.",
+    "100% FOCUSED.",
+    "PEAK PERFORMANCE.",
+    "DELIVERING RESULTS.",
 ]
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
+
+FONT_MONO_LG = ("Consolas", 30, "bold")
+FONT_MONO_MD = ("Consolas", 14, "bold")
+FONT_MONO_SM = ("Consolas", 12)
+FONT_MONO_XS = ("Consolas", 11)
+FONT_BTN     = ("Consolas", 13, "bold")
 
 
 class OrbitApp(ctk.CTk):
@@ -46,287 +60,467 @@ class OrbitApp(ctk.CTk):
         super().__init__()
 
         self.title(f"{APP_NAME} v{APP_VERSION}")
-        self.geometry("420x620")
+        self.geometry("440x690")
         self.resizable(False, False)
         self.configure(fg_color=BG_COLOR)
 
-        # ── State ──────────────────────────────────────────────────────────────
-        self.is_running   = False
-        self.start_time   = None
-        self.productivity = 0
-        self.dot_angle    = 0.0
-        self._msg_index   = 0
-        self._pulse_step  = 0
-        self._pulse_colors = ["#1E1E22", "#252529", "#2A2A30", "#252529"]
+        # Custom icon + title bar theming
+        self._apply_icon()
+        self._apply_titlebar()
 
-        # ── Build UI ───────────────────────────────────────────────────────────
-        self._build_header()
-        self._build_canvas()
-        self._build_controls()
-        self._build_buttons()
-        self._build_footer()
+        # State
+        self.is_running    = False
+        self.start_time    = None
+        self.productivity  = 0
+        self.dot_angle     = 0.0
+        self._msg_idx      = 0
+        self._scanline_y   = 0
 
-        # ── Bindings ───────────────────────────────────────────────────────────
+        self._build_ui()
+
+        # Bindings
         self.bind('<Escape>', lambda e: self.stop_movement())
         self.bind('<Control-h>', self._boss_key)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # ── Start animations & tray ───────────────────────────────────────────
+        # Kick off animations
+        self._boot_sequence()
         self._rotate_message()
-        self._pulse_ring()
+        self._animate_scanline()
         self._setup_tray()
-
-        # ── Update check ──────────────────────────────────────────────────────
         check_for_updates(self._on_update_available)
+
+    # ══ ICON & TITLEBAR ══════════════════════════════════════════════════════
+
+    def _apply_icon(self):
+        """Save a .ico file and apply it via iconbitmap — most reliable on Windows."""
+        import os, tempfile
+        img = self._draw_emblem(pil_size=256)
+
+        # Save .ico (multi-size) to temp dir
+        ico_path = os.path.join(tempfile.gettempdir(), "orbit_mouse_pro.ico")
+        img.save(ico_path, format="ICO",
+                 sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+
+        # Defer until after CTk finishes its own init
+        self.after(0, lambda: self.iconbitmap(ico_path))
+
+        # Also save a high-res PNG for the website
+        try:
+            out = os.path.join(os.path.dirname(__file__), "..", "docs", "logo.png")
+            img.save(os.path.normpath(out))
+        except Exception:
+            pass
+
+    def _apply_titlebar(self):
+        """Colour the Windows title bar to match the cyberpunk theme."""
+        try:
+            pywinstyles.change_header_color(self, "#0D0D1A")
+        except Exception:
+            pass  # Graceful fallback on unsupported Windows versions
+
+    def _draw_emblem(self, pil_size: int) -> Image.Image:
+        """Shared draw routine — used for both the in-app logo and saved files."""
+        S = pil_size
+        img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx = cy = S // 2
+        sc = S / 80  # scale factor (base design is 80 px)
+
+        # Dark navy circle background
+        d.ellipse([0, 0, S - 1, S - 1], fill="#0D0D1A")
+
+        # Subtle inner grid
+        step   = max(1, int(12 * sc))
+        margin = max(1, int(10 * sc))
+        for i in range(margin, S - margin, step):
+            d.line([(margin, i), (S - margin, i)], fill="#181835", width=1)
+            d.line([(i, margin), (i, S - margin)], fill="#181835", width=1)
+
+        # Bloom ring (outermost → brightest)
+        for pad_b, col, w_b in [
+            (6,  "#151800", 16),
+            (10, "#353C00", 10),
+            (13, "#6A7600", 6),
+            (14, "#B0C400", 3),
+            (15, "#E8FF00", 2),
+        ]:
+            pad = max(1, int(pad_b * sc))
+            w   = max(1, int(w_b   * sc))
+            d.arc([pad, pad, S - pad, S - pad], 0, 360, fill=col, width=w)
+
+        ring_r = cx - max(1, int(15 * sc))
+
+        # Cardinal crosshair ticks
+        tick_len = max(2, int(9 * sc))
+        lw = max(1, int(1.5 * sc))
+        for deg in [0, 90, 180, 270]:
+            rad = math.radians(deg)
+            x1 = cx + int(ring_r * math.cos(rad))
+            y1 = cy + int(ring_r * math.sin(rad))
+            x2 = cx + int((ring_r - tick_len) * math.cos(rad))
+            y2 = cy + int((ring_r - tick_len) * math.sin(rad))
+            d.line([(x1, y1), (x2, y2)], fill="#E8FF00", width=lw)
+
+        # Centre reticle
+        cs = max(2, int(5 * sc))
+        d.line([(cx - cs, cy), (cx + cs, cy)], fill="#E8FF00", width=lw)
+        d.line([(cx, cy - cs), (cx, cy + cs)], fill="#E8FF00", width=lw)
+        cr = max(3, int(7 * sc))
+        d.ellipse([cx - cr, cy - cr, cx + cr, cy + cr], outline="#E8FF00", width=lw)
+
+        # Orbiting dot + glow at −45°
+        angle = math.radians(-45)
+        dx = int(cx + ring_r * math.cos(angle))
+        dy = int(cy + ring_r * math.sin(angle))
+        for dot_b, col in [(9, "#1A1D00"), (6, "#909A00"), (3, "#E8FF00")]:
+            dr = max(1, int(dot_b * sc))
+            d.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=col)
+
+        # HUD corner brackets
+        blen = max(4, int(10 * sc))
+        boff = max(2, int(3  * sc))
+        for (x1, y1, sx, sy) in [
+            (boff,     boff,     1, 1),
+            (S-boff-1, boff,    -1, 1),
+            (boff,     S-boff-1, 1,-1),
+            (S-boff-1, S-boff-1,-1,-1),
+        ]:
+            d.line([(x1, y1), (x1 + sx * blen, y1)], fill="#E8FF00", width=lw)
+            d.line([(x1, y1), (x1, y1 + sy * blen)], fill="#E8FF00", width=lw)
+
+        return img
+
+    def _create_logo_emblem(self) -> ctk.CTkImage:
+        """Returns a CTkImage for use in the app header."""
+        img = self._draw_emblem(pil_size=160)
+        return ctk.CTkImage(img, size=(62, 62))
 
     # ══ UI BUILDERS ══════════════════════════════════════════════════════════
 
-    def _build_header(self):
+    def _build_ui(self):
+        # Top neon accent line
+        ctk.CTkFrame(self, height=2, fg_color=NEON_YLW).pack(fill="x")
+
+        # Header — horizontal: emblem | text column
+        hdr_frame = ctk.CTkFrame(self, fg_color="transparent")
+        hdr_frame.pack(pady=(14, 4))
+
+        logo_row = ctk.CTkFrame(hdr_frame, fg_color="transparent")
+        logo_row.pack()
+
+        # Emblem image
+        self._logo_emblem = self._create_logo_emblem()
+        ctk.CTkLabel(logo_row, image=self._logo_emblem, text="").pack(
+            side="left", padx=(0, 14))
+
+        # Text column
+        text_col = ctk.CTkFrame(logo_row, fg_color="transparent")
+        text_col.pack(side="left", anchor="w")
+
         self.header = ctk.CTkLabel(
-            self, text="ORBIT",
-            font=("Consolas", 30, "bold"),
-            text_color=ACCENT_COLOR
+            text_col, text="",          # filled by boot sequence
+            font=FONT_MONO_LG, text_color=NEON_YLW, anchor="w"
         )
-        self.header.pack(pady=(22, 2))
+        self.header.pack(anchor="w")
+
+        ctk.CTkLabel(
+            text_col,
+            text=f"v{APP_VERSION}  ◆  MOUSE AUTOMATION SYSTEM",
+            font=FONT_MONO_XS, text_color=DIM_TEXT, anchor="w"
+        ).pack(anchor="w")
 
         self.subheader = ctk.CTkLabel(
-            self, text=IDLE_MESSAGES[0],
-            font=("Consolas", 11),
-            text_color=DIM_TEXT
+            hdr_frame, text=IDLE_MSGS[0],
+            font=FONT_MONO_XS, text_color=MID_TEXT
         )
-        self.subheader.pack(pady=(0, 14))
+        self.subheader.pack(pady=(6, 4))
+
+        # Central orbit canvas
+        self._build_canvas()
+
+        # Status & timer
+        self.status_label = ctk.CTkLabel(
+            self, text="◈  IDLE",
+            font=FONT_MONO_MD, text_color=DIM_TEXT
+        )
+        self.status_label.pack(pady=(8, 0))
+
+        self.timer_label = ctk.CTkLabel(
+            self, text="",
+            font=FONT_MONO_XS, text_color=MID_TEXT
+        )
+        self.timer_label.pack(pady=(2, 8))
+
+        # Controls card
+        self._build_controls_card()
+
+        # Buttons
+        self._build_buttons()
+
+        # Footer hint
+        ctk.CTkLabel(
+            self, text="[CTRL+H]  HIDE WINDOW",
+            font=FONT_MONO_XS, text_color=DIM_TEXT
+        ).pack(pady=(4, 10))
 
     def _build_canvas(self):
-        """Central animated orbit visualiser."""
-        canvas_size = 160
+        SIZE = 180
+        self.cv_size = SIZE
+        self.cv_cx   = SIZE // 2
+        self.cv_cy   = SIZE // 2
+        self.cv_r    = 66
+
         self.canvas = ctk.CTkCanvas(
-            self, width=canvas_size, height=canvas_size,
+            self, width=SIZE, height=SIZE,
             bg=BG_COLOR, highlightthickness=0
         )
         self.canvas.pack()
 
-        cx = cy = canvas_size // 2
-        r = 60
+        cx, cy, r = self.cv_cx, self.cv_cy, self.cv_r
         pad = cx - r
 
-        # Static dim ring
-        self.ring = self.canvas.create_oval(
-            pad, pad, canvas_size - pad, canvas_size - pad,
-            outline=BORDER_COLOR, width=2
-        )
-        # Travelling dot (hidden at start)
-        self.dot = self.canvas.create_oval(-10, -10, -2, -2, fill=ACCENT_COLOR, outline="")
-        # Centre crosshair dots
-        dot_r = 3
-        self.canvas.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r,
-                                 fill=BORDER_COLOR, outline="")
+        # Background grid
+        for i in range(0, SIZE, 18):
+            self.canvas.create_line(i, 0, i, SIZE, fill="#1E1E40", width=1)
+            self.canvas.create_line(0, i, SIZE, i, fill="#1E1E40", width=1)
 
-        # Status label below canvas
-        self.status_label = ctk.CTkLabel(
-            self, text="● Idle",
-            font=("Consolas", 13),
-            text_color=DIM_TEXT
-        )
-        self.status_label.pack(pady=(10, 0))
+        # HUD corner brackets
+        blen, boff = 14, 8
+        for (x1, y1, dx, dy) in [
+            (boff,        boff,        1,  1),
+            (SIZE - boff, boff,       -1,  1),
+            (boff,        SIZE - boff, 1, -1),
+            (SIZE - boff, SIZE - boff,-1, -1),
+        ]:
+            self.canvas.create_line(x1, y1, x1 + dx * blen, y1,
+                                    fill=NEON_YLW, width=1)
+            self.canvas.create_line(x1, y1, x1, y1 + dy * blen,
+                                    fill=NEON_YLW, width=1)
 
-        self.timer_label = ctk.CTkLabel(
-            self, text="",
-            font=("Consolas", 10),
-            text_color=DIM_TEXT
-        )
-        self.timer_label.pack(pady=(1, 12))
+        # Glow rings (outermost → innermost, creates bloom)
+        self.ring_g1 = self.canvas.create_oval(
+            pad-8, pad-8, SIZE-pad+8, SIZE-pad+8, outline=G1, width=12)
+        self.ring_g2 = self.canvas.create_oval(
+            pad-4, pad-4, SIZE-pad+4, SIZE-pad+4, outline=G2, width=6)
+        self.ring_g3 = self.canvas.create_oval(
+            pad-2, pad-2, SIZE-pad+2, SIZE-pad+2, outline=G3, width=3)
+        self.ring    = self.canvas.create_oval(
+            pad, pad, SIZE-pad, SIZE-pad, outline=BORDER_DIM, width=1)
 
-    def _build_controls(self):
+        # Moving scanline
+        self.scanline = self.canvas.create_line(
+            0, 0, SIZE, 0, fill="#2A2A55", width=2)
+
+        # Dot trail — 4 ghost dots (dim → bright, oldest → newest)
+        self._trail_items = []
+        for glow, size in [(G1, 4), (G2, 6), (G3, 9), (G4, 12)]:
+            dot = self.canvas.create_oval(-30, -30, -30+size, -30+size,
+                                          fill=glow, outline="")
+            self._trail_items.append((dot, size))
+
+        # Centre pip
+        self.canvas.create_oval(cx-3, cy-3, cx+3, cy+3,
+                                 fill=BORDER_DIM, outline="")
+
+    def _build_controls_card(self):
+        outer = ctk.CTkFrame(self, fg_color="transparent")
+        outer.pack(padx=22, pady=4, fill="x")
+
+        # Left accent bar
+        ctk.CTkFrame(outer, width=2, fg_color=NEON_YLW).pack(
+            side="left", fill="y", padx=(0, 10))
+
         card = ctk.CTkFrame(
-            self, fg_color=CARD_COLOR,
-            corner_radius=12,
-            border_width=1, border_color=BORDER_COLOR
+            outer, fg_color=CARD_COLOR,
+            corner_radius=4,
+            border_width=1, border_color=BORDER_DIM
         )
-        card.pack(padx=24, pady=0, fill="x")
+        card.pack(side="left", fill="x", expand=True)
 
         # Pattern selector
-        self.pattern_var = ctk.StringVar(value="Circle")
-        pattern_btn = ctk.CTkSegmentedButton(
-            card, values=["Circle", "Figure-8", "Jitter"],
+        ctk.CTkLabel(card, text="MOVEMENT PATTERN",
+                     font=FONT_MONO_XS, text_color=DIM_TEXT
+                     ).pack(anchor="w", padx=14, pady=(12, 4))
+
+        self.pattern_var = ctk.StringVar(value="CIRCLE")
+        ctk.CTkSegmentedButton(
+            card, values=["CIRCLE", "FIGURE-8", "JITTER"],
             variable=self.pattern_var,
-            font=("Consolas", 11),
-            fg_color=BORDER_COLOR,
-            selected_color=ACCENT_COLOR,
-            selected_hover_color=ACCENT_HOVER,
-            unselected_color=BORDER_COLOR,
-            unselected_hover_color="#2A2A30",
-            text_color=BRIGHT_TEXT,
-        )
-        pattern_btn.pack(padx=16, pady=(14, 10), fill="x")
+            font=FONT_MONO_XS,
+            fg_color=BORDER_DIM,
+            selected_color=NEON_YLW,
+            selected_hover_color="#C8E000",
+            unselected_color=BORDER_DIM,
+            unselected_hover_color="#2A2A50",
+            text_color="#000000",
+            text_color_disabled=MID_TEXT,
+        ).pack(padx=14, pady=(0, 10), fill="x")
+
+        ctk.CTkFrame(card, height=1, fg_color=BORDER_DIM).pack(fill="x", padx=14)
 
         # Radius slider
         r_row = ctk.CTkFrame(card, fg_color="transparent")
-        r_row.pack(padx=16, pady=(4, 0), fill="x")
-        ctk.CTkLabel(r_row, text="RADIUS", font=("Consolas", 10),
-                     text_color=DIM_TEXT).pack(side="left")
-        self.radius_val_label = ctk.CTkLabel(
-            r_row, text="150 px", font=("Consolas", 10), text_color=ACCENT_COLOR
-        )
-        self.radius_val_label.pack(side="right")
+        r_row.pack(padx=14, pady=(8, 2), fill="x")
+        ctk.CTkLabel(r_row, text="RADIUS",
+                     font=FONT_MONO_XS, text_color=DIM_TEXT).pack(side="left")
+        self.radius_val = ctk.CTkLabel(
+            r_row, text="150px", font=FONT_MONO_XS, text_color=NEON_YLW)
+        self.radius_val.pack(side="right")
 
         self.radius_slider = ctk.CTkSlider(
             card, from_=50, to=300, number_of_steps=250,
-            button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
-            progress_color=ACCENT_COLOR, fg_color=BORDER_COLOR,
-            command=self._on_radius_change
+            button_color=NEON_YLW, button_hover_color="#C8E000",
+            progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
+            command=lambda v: self.radius_val.configure(text=f"{int(v)}px")
         )
         self.radius_slider.set(150)
-        self.radius_slider.pack(padx=16, pady=(4, 8), fill="x")
+        self.radius_slider.pack(padx=14, pady=(0, 8), fill="x")
 
         # Speed slider
         s_row = ctk.CTkFrame(card, fg_color="transparent")
-        s_row.pack(padx=16, pady=(4, 0), fill="x")
-        ctk.CTkLabel(s_row, text="SPEED", font=("Consolas", 10),
-                     text_color=DIM_TEXT).pack(side="left")
-        self.speed_val_label = ctk.CTkLabel(
-            s_row, text="5", font=("Consolas", 10), text_color=ACCENT_COLOR
-        )
-        self.speed_val_label.pack(side="right")
+        s_row.pack(padx=14, pady=(4, 2), fill="x")
+        ctk.CTkLabel(s_row, text="SPEED",
+                     font=FONT_MONO_XS, text_color=DIM_TEXT).pack(side="left")
+        self.speed_val = ctk.CTkLabel(
+            s_row, text="5", font=FONT_MONO_XS, text_color=NEON_YLW)
+        self.speed_val.pack(side="right")
 
         self.speed_slider = ctk.CTkSlider(
             card, from_=1, to=10, number_of_steps=9,
-            button_color=ACCENT_COLOR, button_hover_color=ACCENT_HOVER,
-            progress_color=ACCENT_COLOR, fg_color=BORDER_COLOR,
-            command=self._on_speed_change
+            button_color=NEON_YLW, button_hover_color="#C8E000",
+            progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
+            command=lambda v: self.speed_val.configure(text=str(int(v)))
         )
         self.speed_slider.set(5)
-        self.speed_slider.pack(padx=16, pady=(4, 8), fill="x")
+        self.speed_slider.pack(padx=14, pady=(0, 8), fill="x")
+
+        ctk.CTkFrame(card, height=1, fg_color=BORDER_DIM).pack(fill="x", padx=14)
 
         # Productivity bar
         p_row = ctk.CTkFrame(card, fg_color="transparent")
-        p_row.pack(padx=16, pady=(4, 0), fill="x")
-        ctk.CTkLabel(p_row, text="PRODUCTIVITY", font=("Consolas", 10),
-                     text_color=DIM_TEXT).pack(side="left")
+        p_row.pack(padx=14, pady=(8, 2), fill="x")
+        ctk.CTkLabel(p_row, text="PRODUCTIVITY INDEX",
+                     font=FONT_MONO_XS, text_color=DIM_TEXT).pack(side="left")
         self.prod_label = ctk.CTkLabel(
-            p_row, text="0%", font=("Consolas", 10), text_color=ACCENT_COLOR
-        )
+            p_row, text="0%", font=FONT_MONO_XS, text_color=NEON_YLW)
         self.prod_label.pack(side="right")
 
         self.prod_bar = ctk.CTkProgressBar(
-            card, progress_color=ACCENT_COLOR, fg_color=BORDER_COLOR,
-            corner_radius=4, height=6
+            card, progress_color=NEON_YLW, fg_color=BORDER_DIM,
+            corner_radius=2, height=5
         )
         self.prod_bar.set(0)
-        self.prod_bar.pack(padx=16, pady=(4, 14), fill="x")
+        self.prod_bar.pack(padx=14, pady=(0, 12), fill="x")
 
     def _build_buttons(self):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(padx=24, pady=12, fill="x")
+        btn_frame.pack(padx=22, pady=(6, 4), fill="x")
 
         self.start_btn = ctk.CTkButton(
-            btn_frame, text="START MOVEMENT",
-            fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER,
+            btn_frame, text="▶  ENGAGE ORBIT",
+            fg_color=NEON_YLW, hover_color="#C8E000",
             text_color="#000000",
-            font=("Segoe UI", 13, "bold"), height=44,
-            corner_radius=10,
+            font=FONT_BTN, height=46,
+            corner_radius=4,
             command=self.start_movement
         )
-        self.start_btn.pack(fill="x", pady=(0, 8))
+        self.start_btn.pack(fill="x", pady=(0, 6))
 
         self.stop_btn = ctk.CTkButton(
-            btn_frame, text="STOP  (ESC)",
-            fg_color="transparent", border_width=1, border_color=STOP_COLOR,
-            text_color=STOP_COLOR, hover_color=STOP_HOVER,
-            font=("Segoe UI", 13, "bold"), height=44,
-            corner_radius=10,
+            btn_frame, text="■  ABORT  [ESC]",
+            fg_color="transparent",
+            border_width=1, border_color=NEON_RED,
+            text_color=NEON_RED, hover_color="#280010",
+            font=FONT_BTN, height=46,
+            corner_radius=4,
             command=self.stop_movement
         )
         self.stop_btn.pack(fill="x")
 
-    def _build_footer(self):
-        ctk.CTkLabel(
-            self, text="Ctrl+H  —  hide window",
-            font=("Consolas", 9), text_color=DIM_TEXT
-        ).pack(pady=(0, 10))
+    # ══ ANIMATIONS ═══════════════════════════════════════════════════════════
 
-    # ══ SLIDER CALLBACKS ═════════════════════════════════════════════════════
+    def _boot_sequence(self):
+        """Type "ORBIT" one character at a time on startup."""
+        self.header.configure(text="")
+        full = "ORBIT"
+        for i, _ in enumerate(full):
+            self.after(i * 110, lambda t=full[:i+1]: self.header.configure(text=t))
+        # Schedule recurring glitch after boot
+        self.after(len(full) * 110 + 2500, self._schedule_glitch)
 
-    def _on_radius_change(self, value):
-        self.radius_val_label.configure(text=f"{int(value)} px")
+    def _schedule_glitch(self):
+        self._glitch_text()
+        self.after(random.randint(6000, 14000), self._schedule_glitch)
 
-    def _on_speed_change(self, value):
-        self.speed_val_label.configure(text=str(int(value)))
+    def _glitch_text(self):
+        """Briefly corrupt header text with random cyberpunk chars."""
+        original = "ORBIT"
+        frames   = 8
+        for i in range(frames):
+            glitched = "".join(
+                random.choice(GLITCH_CHARS) if random.random() < 0.55 else c
+                for c in original
+            )
+            self.after(
+                i * 50,
+                lambda t=glitched: self.header.configure(text=t, text_color=NEON_CYAN)
+            )
+        self.after(
+            frames * 50,
+            lambda: self.header.configure(text=original, text_color=NEON_YLW)
+        )
 
-    # ══ MOVEMENT LOGIC ═══════════════════════════════════════════════════════
+    def _animate_scanline(self):
+        """CRT-style scanline that sweeps down the canvas."""
+        self._scanline_y = (self._scanline_y + 4) % self.cv_size
+        self.canvas.coords(
+            self.scanline,
+            0, self._scanline_y, self.cv_size, self._scanline_y
+        )
+        self.after(40, self._animate_scanline)
 
-    def _get_sleep(self):
-        # Speed 1 → 0.05s delay, speed 10 → 0.005s delay
-        speed = self.speed_slider.get()
-        return 0.055 - (speed / 10) * 0.05
-
-    def move_logic(self):
-        steps = 80
-
-        while self.is_running:
-            cx, cy = pyautogui.position()
-            radius = self.radius_slider.get()
-            pattern = self.pattern_var.get()
-            sleep = self._get_sleep()
-
-            for i in range(steps):
-                if not self.is_running:
-                    break
-
-                t = i * (2 * math.pi / steps)
-
-                if pattern == "Circle":
-                    x = cx + radius * math.cos(t)
-                    y = cy + radius * math.sin(t)
-                elif pattern == "Figure-8":
-                    x = cx + radius * math.sin(t)
-                    y = cy + (radius / 2) * math.sin(2 * t)
-                else:  # Jitter
-                    x = cx + random.uniform(-radius, radius)
-                    y = cy + random.uniform(-radius, radius)
-
-                try:
-                    pyautogui.moveTo(x, y, _pause=False)
-                except Exception:
-                    self.stop_movement()
-                    return
-
-                time.sleep(sleep)
-
-    # ══ START / STOP ══════════════════════════════════════════════════════════
-
-    def start_movement(self):
+    def _animate_dot(self):
+        """Spinning dot with 4-step neon trail."""
         if not self.is_running:
-            self.is_running = True
-            self.start_time = time.time()
-            self.productivity = 0
-            self.status_label.configure(text="● RUNNING", text_color=ACCENT_COLOR)
-            self.start_btn.configure(state="disabled")
-            self._tick_timer()
-            self._tick_productivity()
-            self._animate_dot()
-            threading.Thread(target=self.move_logic, daemon=True).start()
+            return
 
-    def stop_movement(self):
-        self.is_running = False
-        self.start_time = None
-        self.status_label.configure(text="● Stopped", text_color=DIM_TEXT)
-        self.timer_label.configure(text="")
-        self.start_btn.configure(state="normal")
-        # Hide dot
-        self.canvas.coords(self.dot, -10, -10, -2, -2)
+        cx, cy, r = self.cv_cx, self.cv_cy, self.cv_r
+        speed     = self.speed_slider.get()
+        self.dot_angle = (self.dot_angle + 0.04 + speed * 0.006) % (2 * math.pi)
 
-    # ══ ANIMATIONS & TIMERS ══════════════════════════════════════════════════
+        for idx, (dot_id, sz) in enumerate(self._trail_items):
+            phase = self.dot_angle - (len(self._trail_items) - idx) * 0.20
+            x     = cx + r * math.cos(phase)
+            y     = cy + r * math.sin(phase)
+            half  = sz / 2
+            self.canvas.coords(dot_id, x - half, y - half, x + half, y + half)
+
+        self.after(25, self._animate_dot)
+
+    def _flicker_status(self, text, color, count=0):
+        """Flash status label to signal a state change."""
+        if count < 6:
+            c = color if count % 2 == 0 else BG_COLOR
+            self.status_label.configure(text_color=c)
+            self.after(65, lambda: self._flicker_status(text, color, count + 1))
+        else:
+            self.status_label.configure(text=text, text_color=color)
+
+    def _rotate_message(self):
+        if not self.is_running:
+            self._msg_idx = (self._msg_idx + 1) % len(IDLE_MSGS)
+            self.subheader.configure(text=IDLE_MSGS[self._msg_idx])
+        self.after(3000, self._rotate_message)
 
     def _tick_timer(self):
         if not self.is_running or self.start_time is None:
             return
         elapsed = int(time.time() - self.start_time)
-        h, rem = divmod(elapsed, 3600)
-        m, s = divmod(rem, 60)
-        if h:
-            self.timer_label.configure(text=f"{h}:{m:02d}:{s:02d}")
-        else:
-            self.timer_label.configure(text=f"{m:02d}:{s:02d}")
+        h, rem  = divmod(elapsed, 3600)
+        m, s    = divmod(rem, 60)
+        ts = f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+        self.timer_label.configure(text=f"ELAPSED  {ts}")
         self.after(1000, self._tick_timer)
 
     def _tick_productivity(self):
@@ -337,34 +531,80 @@ class OrbitApp(ctk.CTk):
         self.prod_bar.set(self.productivity / 100)
         self.after(4000, self._tick_productivity)
 
-    def _animate_dot(self):
-        if not self.is_running:
-            return
-        canvas_r = 60
-        cx = cy = 80  # canvas centre (160/2)
-        dot_r = 5
-        x = cx + canvas_r * math.cos(self.dot_angle)
-        y = cy + canvas_r * math.sin(self.dot_angle)
-        self.canvas.coords(self.dot, x - dot_r, y - dot_r, x + dot_r, y + dot_r)
+    # ══ MOVEMENT LOGIC ═══════════════════════════════════════════════════════
+
+    def _get_sleep(self):
         speed = self.speed_slider.get()
-        self.dot_angle += 0.06 + speed * 0.005
-        self.after(30, self._animate_dot)
+        return 0.055 - (speed / 10) * 0.05
 
-    def _pulse_ring(self):
-        color = self._pulse_colors[self._pulse_step % len(self._pulse_colors)]
-        self.canvas.itemconfig(self.ring, outline=color)
-        self._pulse_step += 1
-        self.after(700, self._pulse_ring)
+    def move_logic(self):
+        steps = 80
+        while self.is_running:
+            cx, cy  = pyautogui.position()
+            radius  = self.radius_slider.get()
+            pattern = self.pattern_var.get()
+            sleep   = self._get_sleep()
 
-    def _rotate_message(self):
+            for i in range(steps):
+                if not self.is_running:
+                    break
+                t = i * (2 * math.pi / steps)
+
+                if pattern == "CIRCLE":
+                    x = cx + radius * math.cos(t)
+                    y = cy + radius * math.sin(t)
+                elif pattern == "FIGURE-8":
+                    x = cx + radius * math.sin(t)
+                    y = cy + (radius / 2) * math.sin(2 * t)
+                else:  # JITTER
+                    x = cx + random.uniform(-radius, radius)
+                    y = cy + random.uniform(-radius, radius)
+
+                try:
+                    pyautogui.moveTo(x, y, _pause=False)
+                except Exception:
+                    self.after(0, self.stop_movement)
+                    return
+
+                time.sleep(sleep)
+
+    # ══ START / STOP ══════════════════════════════════════════════════════════
+
+    def start_movement(self):
         if not self.is_running:
-            self._msg_index = (self._msg_index + 1) % len(IDLE_MESSAGES)
-            self.subheader.configure(text=IDLE_MESSAGES[self._msg_index])
-        self.after(3000, self._rotate_message)
+            self.is_running   = True
+            self.start_time   = time.time()
+            self.productivity = 0
+            self.start_btn.configure(state="disabled")
+            self._flicker_status("◈  RUNNING", NEON_YLW)
+            # Ring glows bright yellow when active
+            self.canvas.itemconfig(self.ring, outline=NEON_YLW, width=2)
+            self.canvas.itemconfig(self.ring_g1, outline=G1)
+            self.canvas.itemconfig(self.ring_g2, outline=G2)
+            self.canvas.itemconfig(self.ring_g3, outline=G3)
+            self._tick_timer()
+            self._tick_productivity()
+            self._animate_dot()
+            threading.Thread(target=self.move_logic, daemon=True).start()
+
+    def stop_movement(self):
+        self.is_running = False
+        self.start_time = None
+        self._flicker_status("◈  ABORTED", NEON_RED)
+        self.timer_label.configure(text="")
+        self.start_btn.configure(state="normal")
+        # Dim ring back to resting state
+        self.canvas.itemconfig(self.ring,    outline=BORDER_DIM, width=1)
+        self.canvas.itemconfig(self.ring_g1, outline="#0A0A00")
+        self.canvas.itemconfig(self.ring_g2, outline="#0A0A00")
+        self.canvas.itemconfig(self.ring_g3, outline="#0A0A00")
+        # Park trail dots off-screen
+        for dot_id, sz in self._trail_items:
+            self.canvas.coords(dot_id, -30, -30, -30 + sz, -30 + sz)
 
     # ══ BOSS KEY & TRAY ══════════════════════════════════════════════════════
 
-    def _boss_key(self, _event=None):
+    def _boss_key(self, _=None):
         if self.state() == "normal":
             self.withdraw()
         else:
@@ -372,22 +612,24 @@ class OrbitApp(ctk.CTk):
             self.lift()
 
     def _setup_tray(self):
-        # Draw a teal circle as the tray icon
-        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        img  = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-        draw.ellipse([4, 4, 60, 60], fill="#00C896")
-
+        draw.ellipse([4, 4, 60, 60], fill="#E8FF00")
         menu = pystray.Menu(
-            pystray.MenuItem("Show Window", self._tray_show, default=True),
-            pystray.MenuItem("Stop Movement", lambda: self.after(0, self.stop_movement)),
+            pystray.MenuItem(
+                "Show Window",
+                lambda: self.after(0, lambda: (self.deiconify(), self.lift())),
+                default=True
+            ),
+            pystray.MenuItem(
+                "Stop Movement",
+                lambda: self.after(0, self.stop_movement)
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self.after(0, self.on_close)),
         )
-        self.tray_icon = pystray.Icon("OrbitMousePro", img, "Orbit Mouse Pro", menu)
+        self.tray_icon = pystray.Icon("OrbitMousePro", img, APP_NAME, menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
-
-    def _tray_show(self):
-        self.after(0, lambda: (self.deiconify(), self.lift()))
 
     # ══ UPDATE BANNER ════════════════════════════════════════════════════════
 
@@ -397,12 +639,10 @@ class OrbitApp(ctk.CTk):
     def _show_update_banner(self, version, url):
         banner = ctk.CTkLabel(
             self,
-            text=f"  Update v{version} available — click to download  ",
-            font=("Consolas", 10),
-            text_color="#F59E0B",
-            cursor="hand2"
+            text=f"  ▲ UPDATE v{version} AVAILABLE — CLICK TO DOWNLOAD  ",
+            font=FONT_MONO_XS, text_color=NEON_CYAN, cursor="hand2"
         )
-        banner.pack(pady=(0, 6))
+        banner.pack(pady=(0, 4))
         banner.bind("<Button-1>", lambda e: webbrowser.open(url))
 
     # ══ CLOSE ════════════════════════════════════════════════════════════════
