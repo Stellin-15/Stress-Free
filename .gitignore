@@ -1,5 +1,15 @@
 venv/
 __pycache__/
+*.pyc
+
+# PyInstaller build artifacts (commit .spec, ignore outputs)
 build/
 dist/
-*.spec
+release/
+
+# Allow the spec file - it's our build config
+!*.spec
+
+# Docs
+RELEASING.md
+README.md
