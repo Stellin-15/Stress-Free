@@ -1,0 +1,89 @@
+name: Release
+
+# Push a tag like v1.2.0 to build the exe + installer and publish a GitHub
+# Release. Notes come from the matching CHANGELOG.md section. See RELEASING.md.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            Python Version/requirements.txt
+            requirements-dev.txt
+
+      - name: Check tag matches version.py
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $ver = (python -c "import sys; sys.path.insert(0, 'Python Version'); import version; print(version.APP_VERSION)").Trim()
+          if ($tag -ne $ver) { throw "Tag v$tag does not match version.py ($ver)" }
+          "VERSION=$ver" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Extract release notes from CHANGELOG
+        shell: pwsh
+        run: |
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## \[$env:VERSION\]" | Select-Object -First 1).LineNumber
+          if (-not $start) { throw "CHANGELOG.md has no '## [$env:VERSION]' section" }
+          $notes = @()
+          foreach ($line in $lines[$start..($lines.Count - 1)]) {
+            if ($line -match '^## \[' -or $line -match '^\[.+\]: ') { break }
+            $notes += $line
+          }
+          ($notes -join "`n").Trim() | Out-File -Encoding utf8 notes.md
+          Get-Content notes.md
+
+      - name: Install dependencies
+        run: pip install -r "Python Version/requirements.txt" -r requirements-dev.txt
+
+      - name: Test
+        run: pytest -q
+
+      - name: Build exe
+        working-directory: Python Version
+        run: pyinstaller --noconfirm OrbitMousePro.spec
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --yes --no-progress
+          }
+          & $iscc "/DMyAppVersion=$env:VERSION" installer/setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $file = "release/OrbitMousePro-Setup-v$env:VERSION.exe"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$hash  OrbitMousePro-Setup-v$env:VERSION.exe" | Out-File -Encoding ascii "$file.sha256"
+          "`n`n**SHA-256** ``OrbitMousePro-Setup-v$env:VERSION.exe``: ``$hash``" | Out-File -Append -Encoding utf8 notes.md
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "release/OrbitMousePro-Setup-v$env:VERSION.exe" `
+            "release/OrbitMousePro-Setup-v$env:VERSION.exe.sha256" `
+            --title "Orbit Mouse Pro v$env:VERSION" `
+            --notes-file notes.md `
+            --verify-tag
