@@ -1,5 +1,5 @@
 customtkinter==5.2.2
 darkdetect==0.8.0
-Pillow==12.1.1
+Pillow==12.3.0
 pystray==0.19.5
 pywinstyles==1.8
