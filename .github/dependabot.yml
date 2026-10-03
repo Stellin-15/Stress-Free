@@ -1,20 +1,20 @@
 version: 2
 updates:
-  - package-ecosystem: pip
-    directory: "/Python Version"
-    schedule:
-      interval: monthly
-    groups:
-      python-deps:
-        patterns: ["*"]
+  # One pip entry: a "/" entry also scans "Python Version/requirements.txt",
+  # so separate entries opened duplicate PRs for the same packages.
   - package-ecosystem: pip
     directory: "/"
     schedule:
       interval: monthly
     groups:
-      dev-deps:
-        patterns: ["*"]
+      # Minor/patch bumps land together; majors (e.g. a new customtkinter)
+      # arrive as their own PRs so they get a manual run of the app first.
+      pip-minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
