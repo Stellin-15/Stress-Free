@@ -8,13 +8,17 @@ A cyberpunk-themed mouse automation tool that keeps your status active by moving
 
 ## Features
 
-- **Movement patterns** — Circle, Figure-8, or Jitter (looks human)
+- **Actually keeps you active** — moves are sent as real input (`SendInput`), so Teams, Slack and the screensaver see activity; sleep and screen-off are blocked while running
+- **Stealth mode** — keeps you active with *zero* visible cursor movement (an invisible nudge only after 30 s idle)
+- **Auto-pause** — touch the mouse or keyboard and it backs off; resumes after 15 s of you being idle
+- **Movement patterns** — Circle, Figure-8, Jitter, or Stealth
 - **Radius & speed sliders** — adjust live while running
-- **Running timer** — shows how long you've been "productive"
+- **Running timer + live idle readout** — proof that Windows sees you as active
 - **Productivity Score** — a fake % that climbs to 99% and never hits 100
 - **Funny idle messages** — rotates motivational nonsense while stopped
-- **Boss Key** — `Ctrl+H` hides the window instantly; mouse keeps moving
-- **System tray** — runs silently in the background with Show / Stop / Quit
+- **Global hotkeys** — `Ctrl+Alt+H` hides/shows, `Ctrl+Alt+O` starts/stops, from any app
+- **System tray** — closing the window keeps it running in the tray (Show/Hide, Start/Stop, Quit)
+- **Remembers your settings** — pattern, radius, speed and auto-pause persist between launches
 - **Auto-updater** — notifies you when a new version is available
 - **Cyberpunk UI** — neon yellow animated orbit ring, glitch effects, CRT scanline
 
@@ -52,10 +56,10 @@ python "Python Version/mouse_circle.py"
 
 | Action | How |
 |---|---|
-| Start | Click **▶ ENGAGE ORBIT** |
-| Stop | Click **■ ABORT** or press `ESC` |
-| Hide window | `Ctrl+H` (mouse keeps running) |
-| Restore window | Click the tray icon |
+| Start / Stop | Click **▶ ENGAGE ORBIT** / **■ ABORT**, or `Ctrl+Alt+O` from anywhere |
+| Stop (window focused) | `ESC` |
+| Hide / show window | `Ctrl+Alt+H` from anywhere, or click the tray icon |
+| Close window | Hides to the tray — keeps running |
 | Quit | Tray menu → Quit |
 
 ---
@@ -69,7 +73,7 @@ See [RELEASING.md](RELEASING.md) for the full step-by-step guide.
 ## Tech stack
 
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern dark GUI
-- [pyautogui](https://pyautogui.readthedocs.io/) — mouse control
+- Win32 `SendInput` / `SetThreadExecutionState` via ctypes — real input & sleep prevention
 - [pystray](https://github.com/moses-palmer/pystray) — system tray
 - [Pillow](https://pillow.readthedocs.io/) — icon & logo generation
 - [PyInstaller](https://pyinstaller.org/) — exe packaging

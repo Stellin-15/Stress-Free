@@ -4,6 +4,20 @@ Audit of the repo as of v1.1.0 (commit `0e2426d`). Each gap lists the location, 
 
 Severity: 🔴 broken / misleading · 🟠 real UX or reliability problem · 🟡 polish / hygiene
 
+## Progress
+
+| Item | Status |
+|---|---|
+| 1.1 Real input + sleep prevention | ✅ v1.2: `SendInput` + `SetThreadExecutionState` + live idle readout. Verified: `SetCursorPos` does **not** reset the idle timer, `SendInput` does |
+| 1.2 Drift · 1.3 Double-run · 1.4 Thread safety | ✅ v1.1.1 |
+| 1.5 Auto-pause on user input | ✅ v1.2 (mouse displacement + held keys; resumes after 15 s idle) |
+| 1.6 Global hotkeys | ✅ v1.2 (`Ctrl+Alt+H` hide/show, `Ctrl+Alt+O` start/stop) |
+| 1.7 ESC while idle · X → tray · update banner clipping · settings persistence | ✅ (`_is_newer` pre-release tags and topmost toggle still open) |
+| 2.1 Missing dep · 2.2 exe icon · 2.3 UPX off · 2.4 runtime logo write | ✅ v1.1.1 (signing still open) |
+| 3. RELEASING.md un-ignored | ✅ v1.1.1 (LICENSE still open) |
+| 5.3 Stealth mode · 5.5 Settings saved · 5.17 Real tray emblem | ✅ v1.2 |
+| Website copy for v1.2 features | ⏳ update at release time |
+
 ---
 
 ## 1. Core functionality gaps
