@@ -73,7 +73,8 @@ jobs:
         run: |
           $file = "release/OrbitMousePro-Setup-v$env:VERSION.exe"
           $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
-          "$hash  OrbitMousePro-Setup-v$env:VERSION.exe" | Out-File -Encoding ascii "$file.sha256"
+          # LF line ending, so `sha256sum -c` works (Out-File would write CRLF)
+          [IO.File]::WriteAllText("$PWD/$file.sha256", "$hash  OrbitMousePro-Setup-v$env:VERSION.exe`n")
           "`n`n**SHA-256** ``OrbitMousePro-Setup-v$env:VERSION.exe``: ``$hash``" | Out-File -Append -Encoding utf8 notes.md
 
       - name: Publish GitHub Release
