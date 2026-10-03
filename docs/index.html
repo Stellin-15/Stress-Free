@@ -4,7 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Orbit Mouse Pro</title>
-  <meta name="description" content="Orbit Mouse Pro keeps your PC awake and your status active by moving the mouse in smooth patterns. Free cyberpunk-themed download for Windows." />
+  <meta name="description" content="Orbit Mouse Pro keeps your PC awake and your status active with real input that Windows counts as activity, including a stealth mode that never moves your cursor. Free for Windows." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://stellin-15.github.io/Stress-Free/" />
+  <meta property="og:title" content="Orbit Mouse Pro: stay active, effortlessly" />
+  <meta property="og:description" content="Keeps your PC awake and your status green. Stealth mode, auto-pause, global hotkeys. Free &amp; open source for Windows." />
+  <meta property="og:image" content="https://stellin-15.github.io/Stress-Free/logo.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="theme-color" content="#0D0D1A" />
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="apple-touch-icon" href="logo.png" />
   <link rel="stylesheet" href="style.css" />
@@ -20,7 +27,7 @@
       <a href="#features">Features</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#faq">FAQ</a>
-      <a href="https://github.com/Stellin-15/Stress-Free" target="_blank">GitHub</a>
+      <a href="https://github.com/Stellin-15/Stress-Free" target="_blank" rel="noopener">GitHub</a>
     </div>
   </nav>
 
@@ -28,11 +35,12 @@
   <section class="hero">
     <div class="hero-badge">◈ Free &amp; Open Source</div>
     <h1>Keep Your PC<br /><span>Awake. Effortlessly.</span></h1>
-    <p>Orbit Mouse Pro moves your cursor in smooth patterns so your machine never idles out — no scripts, no fuss, full cyberpunk style.</p>
+    <p>Orbit Mouse Pro sends real input that Windows counts as activity, so your PC stays awake and your status stays green. Stealth mode does it without moving your cursor at all, and the moment you touch the mouse it steps aside.</p>
 
     <a
       class="btn-download"
-      href="https://github.com/Stellin-15/Stress-Free/releases/download/v1.1.0/OrbitMousePro-Setup-v1.1.0.exe"
+      data-download
+      href="https://github.com/Stellin-15/Stress-Free/releases/download/v1.2.0/OrbitMousePro-Setup-v1.2.0.exe"
       download
     >
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -41,7 +49,7 @@
       Download for Windows
     </a>
     <div class="hero-meta">
-      Version <span class="version-badge">v1.1.0</span> &nbsp;·&nbsp; Windows 10 / 11 &nbsp;·&nbsp; ~24 MB
+      Version <span class="version-badge" data-version>v1.2.0</span> &nbsp;·&nbsp; Windows 10 / 11 &nbsp;·&nbsp; ~20 MB
     </div>
   </section>
 
@@ -52,19 +60,19 @@
         <span class="dot r"></span>
         <span class="dot y"></span>
         <span class="dot g"></span>
-        <span>Orbit Mouse Pro v1.1.0</span>
+        <span>Orbit Mouse Pro <span data-version>v1.2.0</span></span>
       </div>
       <div class="app-topline"></div>
       <div class="app-body">
         <div class="app-logo">ORBIT</div>
-        <div class="app-sub">v1.1.0  ◆  MOUSE AUTOMATION SYSTEM</div>
+        <div class="app-sub"><span data-version>v1.2.0</span>  ◆  MOUSE AUTOMATION SYSTEM</div>
         <div class="orbit-viz">
           <div class="orbit-ring">
             <div class="orbit-dot"></div>
           </div>
         </div>
         <div class="app-status">◈  RUNNING</div>
-        <div class="app-timer">ELAPSED  00:04:23</div>
+        <div class="app-timer">ELAPSED  00:04:23  ◆  SYS IDLE  0s</div>
         <div class="app-btn start">▶  ENGAGE ORBIT</div>
         <div class="app-btn stop">■  ABORT  [ESC]</div>
       </div>
@@ -77,34 +85,44 @@
     <div class="section-divider"></div>
     <div class="features-grid">
       <div class="feat-card">
-        <div class="feat-icon">◎</div>
-        <h3>MOVEMENT PATTERNS</h3>
-        <p>Circle, Figure-8, or Jitter — Jitter looks the most human.</p>
+        <div class="feat-icon">◌</div>
+        <h3>STEALTH MODE</h3>
+        <p>Stays active with zero visible cursor movement. Watch a video, read, step away. Nobody sees a thing.</p>
       </div>
       <div class="feat-card">
-        <div class="feat-icon">⊞</div>
-        <h3>LIVE CONTROLS</h3>
-        <p>Radius and speed sliders that update in real-time while running.</p>
+        <div class="feat-icon">⏸</div>
+        <h3>AUTO-PAUSE</h3>
+        <p>Grab the mouse or hit a key and Orbit backs off instantly. It resumes once you've been idle for 15 seconds.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">◉</div>
+        <h3>REAL ACTIVITY</h3>
+        <p>Moves are sent as genuine input, so they reset the Windows idle timer. Sleep and screen-off are blocked while running.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">◎</div>
+        <h3>MOVEMENT PATTERNS</h3>
+        <p>Circle, Figure-8 or Jitter, with radius and speed sliders that update live.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⌨</div>
+        <h3>GLOBAL HOTKEYS</h3>
+        <p>Ctrl+Alt+H hides or shows the window and Ctrl+Alt+O starts or stops it, from any app.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">◱</div>
+        <h3>LIVES IN THE TRAY</h3>
+        <p>Closing the window keeps Orbit running quietly in the tray, and it remembers your settings.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon">⏱</div>
-        <h3>RUNNING TIMER</h3>
-        <p>Tracks exactly how long you've been "productive" this session.</p>
+        <h3>LIVE IDLE READOUT</h3>
+        <p>See exactly what Windows sees: SYS IDLE stays near zero while Orbit works.</p>
       </div>
       <div class="feat-card">
         <div class="feat-icon">📈</div>
         <h3>PRODUCTIVITY SCORE</h3>
-        <p>A fake % that climbs while running. Caps at 99% — never hits 100.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon">⌨</div>
-        <h3>BOSS KEY</h3>
-        <p>Ctrl+H hides the window instantly. Mouse keeps moving in the background.</p>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon">◱</div>
-        <h3>SYSTEM TRAY</h3>
-        <p>Lives quietly in the tray with Show, Stop, and Quit controls.</p>
+        <p>A completely fake % that climbs while running. Caps at 99%. Never hits 100.</p>
       </div>
     </div>
   </section>
@@ -127,7 +145,7 @@
       <div class="step-card">
         <div class="step-num">[ 03 ]</div>
         <h3>WALK AWAY</h3>
-        <p>Your PC stays awake and active. Hit ESC or the tray icon when you're back.</p>
+        <p>Your PC stays awake and active. When you're back, just use your mouse: Orbit pauses itself.</p>
       </div>
     </div>
   </section>
@@ -139,7 +157,7 @@
 
     <details class="faq-item">
       <summary>Windows showed a SmartScreen warning — is it safe?</summary>
-      <p>Yes. The warning appears because the installer isn't signed with a paid certificate. Click <strong>More info</strong> then <strong>Run anyway</strong>. The full source code is on <a href="https://github.com/Stellin-15/Stress-Free" target="_blank">GitHub</a> — verify exactly what it does.</p>
+      <p>Yes. The warning appears because the installer isn't signed with a paid certificate. Click <strong>More info</strong> then <strong>Run anyway</strong>. The full source code is on <a href="https://github.com/Stellin-15/Stress-Free" target="_blank" rel="noopener">GitHub</a> — verify exactly what it does.</p>
     </details>
 
     <details class="faq-item">
@@ -153,8 +171,13 @@
     </details>
 
     <details class="faq-item">
+      <summary>Will it keep me "Available" in Teams or Slack?</summary>
+      <p>Teams, Slack and Windows itself decide you're away from the system idle timer. Orbit sends real input events that reset it, and the <strong>SYS IDLE</strong> readout shows the timer live. Older versions (v1.1.0 and earlier) only moved the cursor, which doesn't count, so please update.</p>
+    </details>
+
+    <details class="faq-item">
       <summary>Will it interfere with my work?</summary>
-      <p>Press ESC or click Abort at any time to stop. Use the Boss Key (Ctrl+H) to instantly hide the window while keeping it running silently in the tray.</p>
+      <p>No. With <strong>Auto-pause</strong> on (the default), Orbit stops the moment you move the mouse or press a key, and resumes after 15 seconds of idle. <strong>Stealth mode</strong> never moves the cursor at all. Ctrl+Alt+O stops it from any app.</p>
     </details>
 
     <details class="faq-item">
@@ -164,17 +187,32 @@
 
     <details class="faq-item">
       <summary>How do I get updates?</summary>
-      <p>The app checks for updates automatically on launch and shows a banner when a new version is available. You can also re-download from this page anytime.</p>
+      <p>The app checks for updates on launch and shows a notice in its footer when a new version is out. Every release is listed on the <a href="https://github.com/Stellin-15/Stress-Free/releases" target="_blank" rel="noopener">Releases page</a> with a SHA-256 checksum.</p>
     </details>
   </section>
 
   <!-- Footer -->
   <footer>
-    <span>ORBIT MOUSE PRO <span class="version-badge">v1.1.0</span></span>
-    <a href="https://github.com/Stellin-15/Stress-Free/releases" target="_blank">Changelog</a>
-    <a href="https://github.com/Stellin-15/Stress-Free/issues" target="_blank">Report a Bug</a>
-    <a href="https://github.com/Stellin-15/Stress-Free" target="_blank">GitHub</a>
+    <span>ORBIT MOUSE PRO <span class="version-badge" data-version>v1.2.0</span></span>
+    <a href="https://github.com/Stellin-15/Stress-Free/releases" target="_blank" rel="noopener">Changelog</a>
+    <a href="https://github.com/Stellin-15/Stress-Free/issues" target="_blank" rel="noopener">Report a Bug</a>
+    <a href="https://github.com/Stellin-15/Stress-Free" target="_blank" rel="noopener">GitHub</a>
   </footer>
+
+  <script>
+    // The HTML above holds fallback values; version.json (also polled by the
+    // app's updater) is the source of truth, so releases don't edit this page.
+    fetch('version.json', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(v => {
+        if (!v || !/^\d+\.\d+\.\d+$/.test(v.version)) return;
+        document.querySelectorAll('[data-version]').forEach(el => { el.textContent = 'v' + v.version; });
+        if (/^https:\/\/github\.com\//.test(v.download_url)) {
+          document.querySelectorAll('[data-download]').forEach(a => { a.href = v.download_url; });
+        }
+      })
+      .catch(() => {});
+  </script>
 
 </body>
 </html>

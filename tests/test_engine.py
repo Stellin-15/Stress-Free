@@ -59,6 +59,23 @@ class FakeWin:
         self.last_input = time.monotonic()
 
 
+def user_grabs_mouse(fw, app, pos, timeout=2.0):
+    """Keep moving the cursor like a real hand until the worker pauses.
+
+    A single teleport can land between the worker's check and its next
+    move and be overwritten. Real mouse use is a stream of movements, and
+    the next step catches it, so the test models that."""
+    end = time.monotonic() + timeout
+    x, y = pos
+    while time.monotonic() < end:
+        fw.user_moves((x, y))
+        if app._paused:
+            return True
+        x += 1
+        time.sleep(0.005)
+    return False
+
+
 def wait_until(cond, timeout=2.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -137,8 +154,7 @@ def test_pauses_on_mouse_and_resumes_when_idle(engine):
     app, fw, start = engine
     start()
     assert wait_until(lambda: fw.moves > 10)
-    fw.user_moves((900, 300))
-    assert wait_until(lambda: app._paused)
+    assert user_grabs_mouse(fw, app, (900, 300))
 
     moves = fw.moves
     time.sleep(0.2)
@@ -146,17 +162,17 @@ def test_pauses_on_mouse_and_resumes_when_idle(engine):
 
     assert wait_until(lambda: not app._paused, timeout=2)
     assert wait_until(lambda: fw.moves > moves + 5)
-    # re-anchored at where the user left the cursor
+    # re-anchored where the user left the cursor (x drifted a little while
+    # "moving"; circle centre sits one radius left of the anchor)
     x, y = fw.pos
-    assert 700 <= x <= 902 and 198 <= y <= 402
+    assert 690 <= x <= 1300 and 198 <= y <= 402
 
 
 def test_keeps_paused_while_user_stays_active(engine):
     app, fw, start = engine
     start()
     assert wait_until(lambda: fw.moves > 10)
-    fw.user_moves((900, 300))
-    assert wait_until(lambda: app._paused)
+    assert user_grabs_mouse(fw, app, (900, 300))
     for i in range(6):                     # user keeps working for ~0.6 s
         fw.user_moves((900 + i, 300))
         time.sleep(0.1)

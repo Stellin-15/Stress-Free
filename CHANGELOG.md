@@ -7,6 +7,8 @@ The release workflow publishes the section matching the tag as the GitHub Releas
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-03
+
 ### Added
 - **Stealth mode**: keeps you active with zero visible cursor movement. It sends an invisible input event only after 30 seconds of idle.
 - **Auto-pause**: moving the mouse or pressing a key pauses Orbit. It resumes after 15 seconds of you being idle.
@@ -44,5 +46,6 @@ The release workflow publishes the section matching the tag as the GitHub Releas
 - Closing the window while movement was active crashed the app.
 - ESC reliably stops movement.
 
-[Unreleased]: https://github.com/Stellin-15/Stress-Free/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Stellin-15/Stress-Free/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Stellin-15/Stress-Free/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Stellin-15/Stress-Free/releases/tag/v1.1.0

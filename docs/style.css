@@ -532,3 +532,18 @@ footer a:hover { color: var(--yellow); }
   margin: 0 auto 3rem;
   box-shadow: 0 0 8px var(--yellow);
 }
+
+/* ── Small screens ── */
+@media (max-width: 600px) {
+  nav { padding: 0.9rem 1rem; }
+  .nav-links { gap: 0.9rem; font-size: 0.75rem; }
+  .nav-links a { white-space: nowrap; }
+}
+
+/* ── Respect reduced-motion preferences (glitch/flicker effects) ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

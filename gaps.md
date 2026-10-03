@@ -13,10 +13,11 @@ Severity: 🔴 broken / misleading · 🟠 real UX or reliability problem · �
 | 1.5 Auto-pause on user input | ✅ v1.2 (mouse displacement + held keys; resumes after 15 s idle) |
 | 1.6 Global hotkeys | ✅ v1.2 (`Ctrl+Alt+H` hide/show, `Ctrl+Alt+O` start/stop) |
 | 1.7 ESC while idle · X → tray · update banner clipping · settings persistence | ✅ (`_is_newer` pre-release tags and topmost toggle still open) |
-| 2.1 Missing dep · 2.2 exe icon · 2.3 UPX off · 2.4 runtime logo write | ✅ v1.1.1 (signing still open) |
-| 3. RELEASING.md un-ignored | ✅ v1.1.1 (LICENSE still open) |
+| 2.1 Missing dep · 2.2 exe icon · 2.3 UPX off · 2.4 runtime logo write | ✅ (code signing still open) |
+| 2.5 Single-source version · 2.6 CI + automated release · 2.7 AppId | ✅ v1.2: tag → Actions builds and publishes; site reads `version.json` |
+| 3. RELEASING.md · LICENSE · tests · CHANGELOG · templates | ✅ MIT license, 30 pytest tests, CI on every PR, branch protection on `main` (module split still open) |
 | 5.3 Stealth mode · 5.5 Settings saved · 5.17 Real tray emblem | ✅ v1.2 |
-| Website copy for v1.2 features | ⏳ update at release time |
+| 4. Website: v1.2 copy · OG tags · `noopener` · mobile nav · reduced motion | ✅ (font `@import` and a real demo GIF still open) |
 
 ---
 
