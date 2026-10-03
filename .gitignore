@@ -9,3 +9,7 @@ release/
 
 # Allow the spec file - it's our build config
 !*.spec
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/

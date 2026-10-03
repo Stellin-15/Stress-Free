@@ -1,0 +1,14 @@
+# Tooling config only. The app itself is run/packaged from "Python Version/".
+
+[tool.ruff]
+target-version = "py39"
+extend-exclude = ["venv", "Python Version/build", "Python Version/dist"]
+
+[tool.ruff.lint]
+# Real bugs only (syntax errors, undefined names, unused imports/variables).
+# The codebase uses aligned assignments for readability, so no style rules.
+select = ["E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["Python Version"]
