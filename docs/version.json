@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "release_date": "2026-03-21",
-  "download_url": "https://github.com/Stellin-15/Stress-Free/releases/download/v1.1.0/OrbitMousePro-Setup-v1.1.0.exe",
-  "release_notes": "Redesigned UI, radius/speed sliders, movement patterns (Circle, Figure-8, Jitter), running timer, productivity score, boss key (Ctrl+H), system tray, security fixes."
+  "version": "1.2.0",
+  "release_date": "2026-10-03",
+  "download_url": "https://github.com/Stellin-15/Stress-Free/releases/download/v1.2.0/OrbitMousePro-Setup-v1.2.0.exe",
+  "release_notes": "Moves now count as real input, resetting the Windows idle timer that Teams and Slack watch. New Stealth mode (no visible cursor movement), auto-pause when you're back, global hotkeys (Ctrl+Alt+H / Ctrl+Alt+O), close-to-tray, remembered settings, and bug fixes."
 }
