@@ -1,5 +1,10 @@
 # Orbit Mouse Pro
 
+[![CI](https://github.com/Stellin-15/Stress-Free/actions/workflows/ci.yml/badge.svg)](https://github.com/Stellin-15/Stress-Free/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Stellin-15/Stress-Free)](https://github.com/Stellin-15/Stress-Free/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Stellin-15/Stress-Free/total)](https://github.com/Stellin-15/Stress-Free/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
 > Ensures you are working even when you are not 😉
 
 A cyberpunk-themed mouse automation tool that keeps your status active by moving your mouse in continuous patterns. Features a slick dark UI with neon animations, real-time controls, and a system tray.
@@ -64,9 +69,11 @@ python "Python Version/mouse_circle.py"
 
 ---
 
-## Releasing a new version
+## Contributing
 
-See [RELEASING.md](RELEASING.md) for the full step-by-step guide.
+PRs welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers dev setup, running the tests (`pytest`, `ruff check .`) and the branch/PR flow. Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
+
+Releases are automated: push a version tag and GitHub Actions builds and publishes the installer. See [RELEASING.md](RELEASING.md).
 
 ---
 
@@ -78,3 +85,9 @@ See [RELEASING.md](RELEASING.md) for the full step-by-step guide.
 - [Pillow](https://pillow.readthedocs.io/) — icon & logo generation
 - [PyInstaller](https://pyinstaller.org/) — exe packaging
 - [Inno Setup](https://jrsoftware.org/isinfo.php) — Windows installer
+
+---
+
+## License
+
+[MIT](LICENSE) © Stellin

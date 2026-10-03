@@ -1,10 +1,19 @@
 ; Orbit Mouse Pro - Inno Setup Script
 ; Build with Inno Setup 6.x (https://jrsoftware.org/isdl.php)
-; Update AppVersion and OutputBaseFilename for every release.
+; The release workflow passes the version from version.py:
+;   ISCC.exe /DMyAppVersion=X.Y.Z installer\setup.iss
+; Building by hand without /D falls back to the value below.
+
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 
 [Setup]
+; Same as Inno's implicit default (AppName) used by v1.1.0 and earlier,
+; so upgrades replace the existing install instead of adding a second one
+AppId=Orbit Mouse Pro
 AppName=Orbit Mouse Pro
-AppVersion=1.1.0
+AppVersion={#MyAppVersion}
 AppPublisher=Stellin-15
 AppPublisherURL=https://stellin-15.github.io/Stress-Free/
 AppSupportURL=https://github.com/Stellin-15/Stress-Free/issues
@@ -12,12 +21,13 @@ AppUpdatesURL=https://stellin-15.github.io/Stress-Free/
 DefaultDirName={autopf}\Orbit Mouse Pro
 DefaultGroupName=Orbit Mouse Pro
 OutputDir=..\release
-OutputBaseFilename=OrbitMousePro-Setup-v1.1.0
+OutputBaseFilename=OrbitMousePro-Setup-v{#MyAppVersion}
 SetupIconFile=..\Python Version\orbit.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-; Admin required so the app can move the mouse globally
+; Admin is for installing into Program Files. The app itself runs
+; unelevated, and moving the mouse needs no special rights.
 PrivilegesRequired=admin
 ; Minimum Windows 10
 MinVersion=10.0
