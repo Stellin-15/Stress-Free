@@ -30,7 +30,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX-packed exes trigger antivirus false positives
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -39,4 +39,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='orbit.ico',
 )

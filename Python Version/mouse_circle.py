@@ -1,6 +1,6 @@
 import customtkinter as ctk
-import pyautogui
 import math
+import queue
 import random
 import threading
 import time
@@ -10,8 +10,8 @@ from updater import check_for_updates
 from PIL import Image, ImageDraw
 import pystray
 import pywinstyles
-
-pyautogui.FAILSAFE = False
+import settings
+import winapi
 
 # ── Cyberpunk Palette ──────────────────────────────────────────────────────────
 BG_COLOR    = "#0D0D1A"    # dark navy — readable, not pitch black
@@ -45,6 +45,19 @@ IDLE_MSGS = [
     "DELIVERING RESULTS.",
 ]
 
+PATTERNS = ["CIRCLE", "FIGURE-8", "JITTER", "STEALTH"]
+
+STEALTH_IDLE_SECS  = 30    # stealth: nudge once the PC has been idle this long
+RESUME_AFTER_SECS  = 15    # auto-pause: resume after you've been idle this long
+AUTO_PAUSE_GRACE   = 1.0   # ignore input right after start (hotkey still held)
+
+HK_TOGGLE_WINDOW = 1       # Ctrl+Alt+H
+HK_TOGGLE_RUN    = 2       # Ctrl+Alt+O
+HOTKEYS = {
+    HK_TOGGLE_WINDOW: (winapi.MOD_CONTROL | winapi.MOD_ALT, ord("H")),
+    HK_TOGGLE_RUN:    (winapi.MOD_CONTROL | winapi.MOD_ALT, ord("O")),
+}
+
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -60,7 +73,7 @@ class OrbitApp(ctk.CTk):
         super().__init__()
 
         self.title(f"{APP_NAME} v{APP_VERSION}")
-        self.geometry("440x690")
+        self.geometry("440x700")   # height corrected by _fit_height()
         self.resizable(False, False)
         self.configure(fg_color=BG_COLOR)
 
@@ -75,19 +88,43 @@ class OrbitApp(ctk.CTk):
         self.dot_angle     = 0.0
         self._msg_idx      = 0
         self._scanline_y   = 0
+        self._run_id       = 0       # bumped on every start; stale loops exit
+        self._stop_event   = threading.Event()
+        self._paused       = False   # set by the worker while you're active
+        self._save_job     = None
+        self._shown_status = None
+
+        # Background threads (tray, hotkeys, updater) never touch Tk directly;
+        # they queue callables that the main thread runs in _poll_events
+        self._events = queue.Queue()
+
+        self.settings = settings.load()
+
+        # Plain copies of the control values — the worker thread reads these,
+        # never the Tk widgets (Tkinter is not thread-safe)
+        self._radius     = float(self.settings["radius"])
+        self._speed      = float(self.settings["speed"])
+        self._pattern    = self.settings["pattern"]
+        if self._pattern not in PATTERNS:
+            self._pattern = "CIRCLE"
+        self._auto_pause = self.settings["auto_pause"]
 
         self._build_ui()
+        self._on_pattern(self._pattern)
+        self._fit_height()
 
         # Bindings
         self.bind('<Escape>', lambda e: self.stop_movement())
-        self.bind('<Control-h>', self._boss_key)
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.bind('<Control-h>', self._boss_key)   # fallback if global key is taken
+        self.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
 
         # Kick off animations
         self._boot_sequence()
         self._rotate_message()
         self._animate_scanline()
         self._setup_tray()
+        self._setup_hotkeys()
+        self._poll_events()
         check_for_updates(self._on_update_available)
 
     # ══ ICON & TITLEBAR ══════════════════════════════════════════════════════
@@ -104,13 +141,6 @@ class OrbitApp(ctk.CTk):
 
         # Defer until after CTk finishes its own init
         self.after(0, lambda: self.iconbitmap(ico_path))
-
-        # Also save a high-res PNG for the website
-        try:
-            out = os.path.join(os.path.dirname(__file__), "..", "docs", "logo.png")
-            img.save(os.path.normpath(out))
-        except Exception:
-            pass
 
     def _apply_titlebar(self):
         """Colour the Windows title bar to match the cyberpunk theme."""
@@ -258,11 +288,19 @@ class OrbitApp(ctk.CTk):
         # Buttons
         self._build_buttons()
 
-        # Footer hint
-        ctk.CTkLabel(
-            self, text="[CTRL+H]  HIDE WINDOW",
+        # Footer hint — doubles as the update banner so it's never clipped
+        self.footer = ctk.CTkLabel(
+            self, text="[CTRL+ALT+H] HIDE  ◆  [CTRL+ALT+O] START/STOP",
             font=FONT_MONO_XS, text_color=DIM_TEXT
-        ).pack(pady=(4, 10))
+        )
+        self.footer.pack(pady=(4, 10))
+
+    def _fit_height(self):
+        """Size the window to its content — a hardcoded height clipped the
+        Abort button and footer. CTk's geometry() takes unscaled px."""
+        self.update_idletasks()
+        h = int(self.winfo_reqheight() / self._get_window_scaling())
+        self.geometry(f"440x{h}")
 
     def _build_canvas(self):
         SIZE = 180
@@ -343,10 +381,11 @@ class OrbitApp(ctk.CTk):
                      font=FONT_MONO_XS, text_color=DIM_TEXT
                      ).pack(anchor="w", padx=14, pady=(12, 4))
 
-        self.pattern_var = ctk.StringVar(value="CIRCLE")
+        self.pattern_var = ctk.StringVar(value=self._pattern)
         ctk.CTkSegmentedButton(
-            card, values=["CIRCLE", "FIGURE-8", "JITTER"],
+            card, values=PATTERNS,
             variable=self.pattern_var,
+            command=self._on_pattern,
             font=FONT_MONO_XS,
             fg_color=BORDER_DIM,
             selected_color=NEON_YLW,
@@ -365,16 +404,17 @@ class OrbitApp(ctk.CTk):
         ctk.CTkLabel(r_row, text="RADIUS",
                      font=FONT_MONO_XS, text_color=DIM_TEXT).pack(side="left")
         self.radius_val = ctk.CTkLabel(
-            r_row, text="150px", font=FONT_MONO_XS, text_color=NEON_YLW)
+            r_row, text=f"{int(self._radius)}px",
+            font=FONT_MONO_XS, text_color=NEON_YLW)
         self.radius_val.pack(side="right")
 
         self.radius_slider = ctk.CTkSlider(
             card, from_=50, to=300, number_of_steps=250,
             button_color=NEON_YLW, button_hover_color="#C8E000",
             progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
-            command=lambda v: self.radius_val.configure(text=f"{int(v)}px")
+            command=self._on_radius
         )
-        self.radius_slider.set(150)
+        self.radius_slider.set(self._radius)
         self.radius_slider.pack(padx=14, pady=(0, 8), fill="x")
 
         # Speed slider
@@ -383,17 +423,31 @@ class OrbitApp(ctk.CTk):
         ctk.CTkLabel(s_row, text="SPEED",
                      font=FONT_MONO_XS, text_color=DIM_TEXT).pack(side="left")
         self.speed_val = ctk.CTkLabel(
-            s_row, text="5", font=FONT_MONO_XS, text_color=NEON_YLW)
+            s_row, text=str(int(self._speed)),
+            font=FONT_MONO_XS, text_color=NEON_YLW)
         self.speed_val.pack(side="right")
 
         self.speed_slider = ctk.CTkSlider(
             card, from_=1, to=10, number_of_steps=9,
             button_color=NEON_YLW, button_hover_color="#C8E000",
             progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
-            command=lambda v: self.speed_val.configure(text=str(int(v)))
+            command=self._on_speed
         )
-        self.speed_slider.set(5)
+        self.speed_slider.set(self._speed)
         self.speed_slider.pack(padx=14, pady=(0, 8), fill="x")
+
+        ctk.CTkFrame(card, height=1, fg_color=BORDER_DIM).pack(fill="x", padx=14)
+
+        # Auto-pause toggle
+        self.auto_pause_var = ctk.BooleanVar(value=self._auto_pause)
+        ctk.CTkSwitch(
+            card, text="AUTO-PAUSE WHEN I'M BACK",
+            variable=self.auto_pause_var, command=self._on_auto_pause,
+            font=FONT_MONO_XS, text_color=DIM_TEXT,
+            progress_color=NEON_YLW, button_color=MID_TEXT,
+            button_hover_color=NEON_YLW, fg_color=BORDER_DIM,
+            switch_width=34, switch_height=16,
+        ).pack(anchor="w", padx=14, pady=8)
 
         ctk.CTkFrame(card, height=1, fg_color=BORDER_DIM).pack(fill="x", padx=14)
 
@@ -438,6 +492,47 @@ class OrbitApp(ctk.CTk):
         )
         self.stop_btn.pack(fill="x")
 
+    # ══ CONTROL CALLBACKS ════════════════════════════════════════════════════
+
+    def _on_radius(self, v):
+        self._radius = float(v)
+        self.radius_val.configure(text=f"{int(v)}px")
+        self._schedule_save()
+
+    def _on_speed(self, v):
+        self._speed = float(v)
+        self.speed_val.configure(text=str(int(v)))
+        self._schedule_save()
+
+    def _on_pattern(self, value):
+        self._pattern = value
+        # Stealth never moves the cursor, so radius/speed don't apply
+        state = "disabled" if value == "STEALTH" else "normal"
+        self.radius_slider.configure(state=state)
+        self.speed_slider.configure(state=state)
+        self._schedule_save()
+
+    def _on_auto_pause(self):
+        self._auto_pause = bool(self.auto_pause_var.get())
+        self._schedule_save()
+
+    def _schedule_save(self):
+        """Debounced — slider drags fire dozens of callbacks per second."""
+        if self._save_job is not None:
+            self.after_cancel(self._save_job)
+        self._save_job = self.after(500, self._save_settings)
+
+    def _save_settings(self):
+        self._save_job = None
+        self.settings.update(
+            pattern=self._pattern, radius=int(self._radius),
+            speed=int(self._speed), auto_pause=self._auto_pause,
+        )
+        settings.save(self.settings)
+
+    def _is_current(self, run_id):
+        return self.is_running and run_id == self._run_id
+
     # ══ ANIMATIONS ═══════════════════════════════════════════════════════════
 
     def _boot_sequence(self):
@@ -480,13 +575,13 @@ class OrbitApp(ctk.CTk):
         )
         self.after(40, self._animate_scanline)
 
-    def _animate_dot(self):
+    def _animate_dot(self, run_id):
         """Spinning dot with 4-step neon trail."""
-        if not self.is_running:
+        if not self._is_current(run_id):
             return
 
         cx, cy, r = self.cv_cx, self.cv_cy, self.cv_r
-        speed     = self.speed_slider.get()
+        speed     = self._speed
         self.dot_angle = (self.dot_angle + 0.04 + speed * 0.006) % (2 * math.pi)
 
         for idx, (dot_id, sz) in enumerate(self._trail_items):
@@ -496,7 +591,7 @@ class OrbitApp(ctk.CTk):
             half  = sz / 2
             self.canvas.coords(dot_id, x - half, y - half, x + half, y + half)
 
-        self.after(25, self._animate_dot)
+        self.after(25, self._animate_dot, run_id)
 
     def _flicker_status(self, text, color, count=0):
         """Flash status label to signal a state change."""
@@ -513,82 +608,153 @@ class OrbitApp(ctk.CTk):
             self.subheader.configure(text=IDLE_MSGS[self._msg_idx])
         self.after(3000, self._rotate_message)
 
-    def _tick_timer(self):
-        if not self.is_running or self.start_time is None:
+    def _current_status(self):
+        if self._paused:
+            return "◈  PAUSED — YOU'RE BACK", NEON_CYAN
+        if self._pattern == "STEALTH":
+            return "◈  STEALTH ACTIVE", NEON_YLW
+        return "◈  RUNNING", NEON_YLW
+
+    def _tick_ui(self, run_id):
+        """Elapsed time, live system-idle readout, and pause/mode status."""
+        if not self._is_current(run_id) or self.start_time is None:
             return
         elapsed = int(time.time() - self.start_time)
         h, rem  = divmod(elapsed, 3600)
         m, s    = divmod(rem, 60)
         ts = f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
-        self.timer_label.configure(text=f"ELAPSED  {ts}")
-        self.after(1000, self._tick_timer)
+        # Idle readout proves it's working: stays near 0 (or resets every
+        # STEALTH_IDLE_SECS in stealth) as Windows sees our input
+        idle = int(winapi.idle_seconds())
+        self.timer_label.configure(text=f"ELAPSED  {ts}   ◆   SYS IDLE  {idle}s")
 
-    def _tick_productivity(self):
-        if not self.is_running:
+        status = self._current_status()
+        if status != self._shown_status:
+            self._shown_status = status
+            self._flicker_status(*status)
+        self.after(250, self._tick_ui, run_id)
+
+    def _tick_productivity(self, run_id):
+        if not self._is_current(run_id):
             return
         self.productivity = min(99, self.productivity + random.randint(1, 3))
         self.prod_label.configure(text=f"{self.productivity}%")
         self.prod_bar.set(self.productivity / 100)
-        self.after(4000, self._tick_productivity)
+        self.after(4000, self._tick_productivity, run_id)
 
     # ══ MOVEMENT LOGIC ═══════════════════════════════════════════════════════
 
     def _get_sleep(self):
-        speed = self.speed_slider.get()
-        return 0.055 - (speed / 10) * 0.05
+        return 0.055 - (self._speed / 10) * 0.05
 
-    def move_logic(self):
-        steps = 80
-        while self.is_running:
-            cx, cy  = pyautogui.position()
-            radius  = self.radius_slider.get()
-            pattern = self.pattern_var.get()
-            sleep   = self._get_sleep()
+    def move_logic(self, stop_event):
+        """Worker thread. Orbits a fixed anchor so the path never drifts.
 
-            for i in range(steps):
-                if not self.is_running:
-                    break
-                t = i * (2 * math.pi / steps)
+        Only reads plain attributes (_radius/_speed/_pattern/_auto_pause),
+        never Tk widgets. Moves go through SendInput so Windows counts them
+        as real activity.
+        """
+        steps     = 80
+        anchor    = None     # re-captured on start, resume, or leaving stealth
+        last_set  = None     # where the cursor actually landed after our move
+        armed_at  = time.monotonic() + AUTO_PAUSE_GRACE
+        baseline  = frozenset()   # keys already held when this anchor was set
+        i         = 0
+        while not stop_event.is_set():
+            pattern = self._pattern
 
-                if pattern == "CIRCLE":
-                    x = cx + radius * math.cos(t)
-                    y = cy + radius * math.sin(t)
-                elif pattern == "FIGURE-8":
-                    x = cx + radius * math.sin(t)
-                    y = cy + (radius / 2) * math.sin(2 * t)
-                else:  # JITTER
-                    x = cx + random.uniform(-radius, radius)
-                    y = cy + random.uniform(-radius, radius)
+            if pattern == "STEALTH":
+                # Invisible: a zero-distance move only when the PC has gone
+                # idle, so it never fights you while you're working
+                anchor = last_set = None
+                if winapi.idle_seconds() >= STEALTH_IDLE_SECS:
+                    winapi.nudge()
+                stop_event.wait(1.0)
+                continue
 
-                try:
-                    pyautogui.moveTo(x, y, _pause=False)
-                except Exception:
-                    self.after(0, self.stop_movement)
-                    return
+            if (self._auto_pause and last_set is not None
+                    and time.monotonic() >= armed_at
+                    and winapi.user_input_detected(last_set, baseline)):
+                # You're back — hands off until you've been idle a while.
+                # We send nothing while paused, so idle_seconds() is all you.
+                self._paused = True
+                while (not stop_event.is_set()
+                       and winapi.idle_seconds() < RESUME_AFTER_SECS):
+                    stop_event.wait(0.5)
+                self._paused = False
+                anchor = last_set = None
+                armed_at = time.monotonic() + AUTO_PAUSE_GRACE
+                continue
 
-                time.sleep(sleep)
+            if anchor is None:
+                ax, ay = anchor = winapi.get_cursor_pos()
+                # Circle centre sits left of the cursor so the orbit starts
+                # where the cursor already is instead of jumping on frame one
+                circle_cx = ax - self._radius
+                baseline  = winapi.keys_down()
+                i = 0
+
+            radius = self._radius
+            t = (i % steps) * (2 * math.pi / steps)
+            if pattern == "CIRCLE":
+                x = circle_cx + radius * math.cos(t)
+                y = ay + radius * math.sin(t)
+            elif pattern == "FIGURE-8":
+                x = ax + radius * math.sin(t)
+                y = ay + (radius / 2) * math.sin(2 * t)
+            else:  # JITTER
+                x = ax + random.uniform(-radius, radius)
+                y = ay + random.uniform(-radius, radius)
+
+            try:
+                winapi.move_to(x, y)
+                # Read back rather than trust (x, y): the OS clamps at screen
+                # edges, and a mismatch there must not look like user input
+                last_set = winapi.get_cursor_pos()
+            except Exception:
+                if not stop_event.is_set():
+                    self._events.put(self.stop_movement)
+                return
+
+            i += 1
+            # wait() returns immediately on stop, unlike time.sleep()
+            stop_event.wait(self._get_sleep())
 
     # ══ START / STOP ══════════════════════════════════════════════════════════
 
     def start_movement(self):
-        if not self.is_running:
-            self.is_running   = True
-            self.start_time   = time.time()
-            self.productivity = 0
-            self.start_btn.configure(state="disabled")
-            self._flicker_status("◈  RUNNING", NEON_YLW)
-            # Ring glows bright yellow when active
-            self.canvas.itemconfig(self.ring, outline=NEON_YLW, width=2)
-            self.canvas.itemconfig(self.ring_g1, outline=G1)
-            self.canvas.itemconfig(self.ring_g2, outline=G2)
-            self.canvas.itemconfig(self.ring_g3, outline=G3)
-            self._tick_timer()
-            self._tick_productivity()
-            self._animate_dot()
-            threading.Thread(target=self.move_logic, daemon=True).start()
+        if self.is_running:
+            return
+        self.is_running   = True
+        self._run_id     += 1
+        run_id            = self._run_id
+        self._stop_event  = threading.Event()
+        self._paused      = False
+        self.start_time   = time.time()
+        self.productivity = 0
+        self.start_btn.configure(state="disabled")
+        self._shown_status = self._current_status()
+        self._flicker_status(*self._shown_status)
+        # Ring glows bright yellow when active
+        self.canvas.itemconfig(self.ring, outline=NEON_YLW, width=2)
+        self.canvas.itemconfig(self.ring_g1, outline=G1)
+        self.canvas.itemconfig(self.ring_g2, outline=G2)
+        self.canvas.itemconfig(self.ring_g3, outline=G3)
+        winapi.keep_awake(True)   # main thread holds the flag — see winapi
+        self._save_settings()
+        self._tick_ui(run_id)
+        self._tick_productivity(run_id)
+        self._animate_dot(run_id)
+        threading.Thread(target=self.move_logic, args=(self._stop_event,),
+                         daemon=True).start()
 
     def stop_movement(self):
+        if not self.is_running:
+            return  # ESC / tray "Stop" while idle — nothing to abort
         self.is_running = False
+        self._stop_event.set()
+        self._paused = False
+        winapi.keep_awake(False)
         self.start_time = None
         self._flicker_status("◈  ABORTED", NEON_RED)
         self.timer_label.configure(text="")
@@ -602,57 +768,100 @@ class OrbitApp(ctk.CTk):
         for dot_id, sz in self._trail_items:
             self.canvas.coords(dot_id, -30, -30, -30 + sz, -30 + sz)
 
-    # ══ BOSS KEY & TRAY ══════════════════════════════════════════════════════
+    def _toggle_running(self):
+        if self.is_running:
+            self.stop_movement()
+        else:
+            self.start_movement()
+
+    # ══ EVENTS FROM BACKGROUND THREADS ═══════════════════════════════════════
+
+    def _poll_events(self):
+        """Run callables queued by the tray, hotkey and updater threads."""
+        try:
+            while True:
+                self._events.get_nowait()()
+        except queue.Empty:
+            pass
+        self.after(100, self._poll_events)
+
+    # ══ BOSS KEY, HOTKEYS & TRAY ═════════════════════════════════════════════
 
     def _boss_key(self, _=None):
         if self.state() == "normal":
             self.withdraw()
         else:
-            self.deiconify()
-            self.lift()
+            self._show_window()
+
+    def _show_window(self):
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def _hide_to_tray(self):
+        """Window X hides to the tray; Quit lives in the tray menu."""
+        self.withdraw()
+        if not self.settings["tray_hint_shown"]:
+            self.settings["tray_hint_shown"] = True
+            settings.save(self.settings)
+            try:
+                self.tray_icon.notify(
+                    "Still running in the tray. Right-click the icon → Quit "
+                    "to exit, or press Ctrl+Alt+H to bring the window back.",
+                    APP_NAME)
+            except Exception:
+                pass
+
+    def _setup_hotkeys(self):
+        actions = {
+            HK_TOGGLE_WINDOW: self._boss_key,
+            HK_TOGGLE_RUN:    self._toggle_running,
+        }
+        self.hotkeys = winapi.HotkeyListener(
+            HOTKEYS, lambda hk_id: self._events.put(actions[hk_id]))
+        self.hotkeys.start()
 
     def _setup_tray(self):
-        img  = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        draw.ellipse([4, 4, 60, 60], fill="#E8FF00")
+        q = self._events.put
         menu = pystray.Menu(
+            pystray.MenuItem("Show / Hide", lambda: q(self._boss_key),
+                             default=True),
             pystray.MenuItem(
-                "Show Window",
-                lambda: self.after(0, lambda: (self.deiconify(), self.lift())),
-                default=True
-            ),
-            pystray.MenuItem(
-                "Stop Movement",
-                lambda: self.after(0, self.stop_movement)
-            ),
+                lambda item: "Stop" if self.is_running else "Start",
+                lambda: q(self._toggle_running)),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", lambda: self.after(0, self.on_close)),
+            pystray.MenuItem("Quit", lambda: q(self.on_close)),
         )
-        self.tray_icon = pystray.Icon("OrbitMousePro", img, APP_NAME, menu)
+        self.tray_icon = pystray.Icon(
+            "OrbitMousePro", self._draw_emblem(pil_size=64), APP_NAME, menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     # ══ UPDATE BANNER ════════════════════════════════════════════════════════
 
     def _on_update_available(self, version, url):
-        self.after(0, lambda: self._show_update_banner(version, url))
+        self._events.put(lambda: self._show_update_banner(version, url))
 
     def _show_update_banner(self, version, url):
-        banner = ctk.CTkLabel(
-            self,
-            text=f"  ▲ UPDATE v{version} AVAILABLE — CLICK TO DOWNLOAD  ",
-            font=FONT_MONO_XS, text_color=NEON_CYAN, cursor="hand2"
-        )
-        banner.pack(pady=(0, 4))
-        banner.bind("<Button-1>", lambda e: webbrowser.open(url))
+        # Reuse the footer slot so the banner is always inside the window
+        self.footer.configure(
+            text=f"▲ UPDATE v{version} AVAILABLE — CLICK TO DOWNLOAD",
+            text_color=NEON_CYAN, cursor="hand2")
+        self.footer.bind("<Button-1>", lambda e: webbrowser.open(url))
 
     # ══ CLOSE ════════════════════════════════════════════════════════════════
 
     def on_close(self):
         self.is_running = False
-        try:
-            self.tray_icon.stop()
-        except Exception:
-            pass
+        self._stop_event.set()
+        winapi.keep_awake(False)
+        if self._save_job is not None:
+            self.after_cancel(self._save_job)
+        self._save_settings()
+        for stopper in (self.hotkeys.stop, self.tray_icon.stop):
+            try:
+                stopper()
+            except Exception:
+                pass
         self.destroy()
 
 
