@@ -9,7 +9,3 @@ release/
 
 # Allow the spec file - it's our build config
 !*.spec
-
-# Docs
-RELEASING.md
-README.md

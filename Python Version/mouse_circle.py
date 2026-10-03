@@ -75,6 +75,14 @@ class OrbitApp(ctk.CTk):
         self.dot_angle     = 0.0
         self._msg_idx      = 0
         self._scanline_y   = 0
+        self._run_id       = 0       # bumped on every start; stale loops exit
+        self._stop_event   = threading.Event()
+
+        # Plain copies of the control values — the worker thread reads these,
+        # never the Tk widgets (Tkinter is not thread-safe)
+        self._radius  = 150.0
+        self._speed   = 5.0
+        self._pattern = "CIRCLE"
 
         self._build_ui()
 
@@ -104,13 +112,6 @@ class OrbitApp(ctk.CTk):
 
         # Defer until after CTk finishes its own init
         self.after(0, lambda: self.iconbitmap(ico_path))
-
-        # Also save a high-res PNG for the website
-        try:
-            out = os.path.join(os.path.dirname(__file__), "..", "docs", "logo.png")
-            img.save(os.path.normpath(out))
-        except Exception:
-            pass
 
     def _apply_titlebar(self):
         """Colour the Windows title bar to match the cyberpunk theme."""
@@ -347,6 +348,7 @@ class OrbitApp(ctk.CTk):
         ctk.CTkSegmentedButton(
             card, values=["CIRCLE", "FIGURE-8", "JITTER"],
             variable=self.pattern_var,
+            command=self._on_pattern,
             font=FONT_MONO_XS,
             fg_color=BORDER_DIM,
             selected_color=NEON_YLW,
@@ -372,7 +374,7 @@ class OrbitApp(ctk.CTk):
             card, from_=50, to=300, number_of_steps=250,
             button_color=NEON_YLW, button_hover_color="#C8E000",
             progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
-            command=lambda v: self.radius_val.configure(text=f"{int(v)}px")
+            command=self._on_radius
         )
         self.radius_slider.set(150)
         self.radius_slider.pack(padx=14, pady=(0, 8), fill="x")
@@ -390,7 +392,7 @@ class OrbitApp(ctk.CTk):
             card, from_=1, to=10, number_of_steps=9,
             button_color=NEON_YLW, button_hover_color="#C8E000",
             progress_color=NEON_YLW, fg_color=BORDER_DIM, height=14,
-            command=lambda v: self.speed_val.configure(text=str(int(v)))
+            command=self._on_speed
         )
         self.speed_slider.set(5)
         self.speed_slider.pack(padx=14, pady=(0, 8), fill="x")
@@ -438,6 +440,22 @@ class OrbitApp(ctk.CTk):
         )
         self.stop_btn.pack(fill="x")
 
+    # ══ CONTROL CALLBACKS ════════════════════════════════════════════════════
+
+    def _on_radius(self, v):
+        self._radius = float(v)
+        self.radius_val.configure(text=f"{int(v)}px")
+
+    def _on_speed(self, v):
+        self._speed = float(v)
+        self.speed_val.configure(text=str(int(v)))
+
+    def _on_pattern(self, value):
+        self._pattern = value
+
+    def _is_current(self, run_id):
+        return self.is_running and run_id == self._run_id
+
     # ══ ANIMATIONS ═══════════════════════════════════════════════════════════
 
     def _boot_sequence(self):
@@ -480,13 +498,13 @@ class OrbitApp(ctk.CTk):
         )
         self.after(40, self._animate_scanline)
 
-    def _animate_dot(self):
+    def _animate_dot(self, run_id):
         """Spinning dot with 4-step neon trail."""
-        if not self.is_running:
+        if not self._is_current(run_id):
             return
 
         cx, cy, r = self.cv_cx, self.cv_cy, self.cv_r
-        speed     = self.speed_slider.get()
+        speed     = self._speed
         self.dot_angle = (self.dot_angle + 0.04 + speed * 0.006) % (2 * math.pi)
 
         for idx, (dot_id, sz) in enumerate(self._trail_items):
@@ -496,7 +514,7 @@ class OrbitApp(ctk.CTk):
             half  = sz / 2
             self.canvas.coords(dot_id, x - half, y - half, x + half, y + half)
 
-        self.after(25, self._animate_dot)
+        self.after(25, self._animate_dot, run_id)
 
     def _flicker_status(self, text, color, count=0):
         """Flash status label to signal a state change."""
@@ -513,66 +531,74 @@ class OrbitApp(ctk.CTk):
             self.subheader.configure(text=IDLE_MSGS[self._msg_idx])
         self.after(3000, self._rotate_message)
 
-    def _tick_timer(self):
-        if not self.is_running or self.start_time is None:
+    def _tick_timer(self, run_id):
+        if not self._is_current(run_id) or self.start_time is None:
             return
         elapsed = int(time.time() - self.start_time)
         h, rem  = divmod(elapsed, 3600)
         m, s    = divmod(rem, 60)
         ts = f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
         self.timer_label.configure(text=f"ELAPSED  {ts}")
-        self.after(1000, self._tick_timer)
+        self.after(1000, self._tick_timer, run_id)
 
-    def _tick_productivity(self):
-        if not self.is_running:
+    def _tick_productivity(self, run_id):
+        if not self._is_current(run_id):
             return
         self.productivity = min(99, self.productivity + random.randint(1, 3))
         self.prod_label.configure(text=f"{self.productivity}%")
         self.prod_bar.set(self.productivity / 100)
-        self.after(4000, self._tick_productivity)
+        self.after(4000, self._tick_productivity, run_id)
 
     # ══ MOVEMENT LOGIC ═══════════════════════════════════════════════════════
 
     def _get_sleep(self):
-        speed = self.speed_slider.get()
-        return 0.055 - (speed / 10) * 0.05
+        return 0.055 - (self._speed / 10) * 0.05
 
-    def move_logic(self):
+    def move_logic(self, run_id, stop_event, anchor):
+        """Worker thread. Orbits a fixed anchor so the path never drifts.
+
+        Only reads plain attributes (_radius/_speed/_pattern), never Tk widgets.
+        """
         steps = 80
-        while self.is_running:
-            cx, cy  = pyautogui.position()
-            radius  = self.radius_slider.get()
-            pattern = self.pattern_var.get()
-            sleep   = self._get_sleep()
+        ax, ay = anchor
+        # Circle centre sits left of the cursor so the orbit starts where the
+        # cursor already is instead of jumping `radius` px on the first frame
+        circle_cx = ax - self._radius
+        i = 0
+        while not stop_event.is_set():
+            radius  = self._radius
+            pattern = self._pattern
+            t = (i % steps) * (2 * math.pi / steps)
 
-            for i in range(steps):
-                if not self.is_running:
-                    break
-                t = i * (2 * math.pi / steps)
+            if pattern == "CIRCLE":
+                x = circle_cx + radius * math.cos(t)
+                y = ay + radius * math.sin(t)
+            elif pattern == "FIGURE-8":
+                x = ax + radius * math.sin(t)
+                y = ay + (radius / 2) * math.sin(2 * t)
+            else:  # JITTER
+                x = ax + random.uniform(-radius, radius)
+                y = ay + random.uniform(-radius, radius)
 
-                if pattern == "CIRCLE":
-                    x = cx + radius * math.cos(t)
-                    y = cy + radius * math.sin(t)
-                elif pattern == "FIGURE-8":
-                    x = cx + radius * math.sin(t)
-                    y = cy + (radius / 2) * math.sin(2 * t)
-                else:  # JITTER
-                    x = cx + random.uniform(-radius, radius)
-                    y = cy + random.uniform(-radius, radius)
-
-                try:
-                    pyautogui.moveTo(x, y, _pause=False)
-                except Exception:
+            try:
+                pyautogui.moveTo(x, y, _pause=False)
+            except Exception:
+                if not stop_event.is_set():
                     self.after(0, self.stop_movement)
-                    return
+                return
 
-                time.sleep(sleep)
+            i += 1
+            # wait() returns immediately on stop, unlike time.sleep()
+            stop_event.wait(self._get_sleep())
 
     # ══ START / STOP ══════════════════════════════════════════════════════════
 
     def start_movement(self):
         if not self.is_running:
             self.is_running   = True
+            self._run_id     += 1
+            run_id            = self._run_id
+            self._stop_event  = threading.Event()
             self.start_time   = time.time()
             self.productivity = 0
             self.start_btn.configure(state="disabled")
@@ -582,13 +608,20 @@ class OrbitApp(ctk.CTk):
             self.canvas.itemconfig(self.ring_g1, outline=G1)
             self.canvas.itemconfig(self.ring_g2, outline=G2)
             self.canvas.itemconfig(self.ring_g3, outline=G3)
-            self._tick_timer()
-            self._tick_productivity()
-            self._animate_dot()
-            threading.Thread(target=self.move_logic, daemon=True).start()
+            self._tick_timer(run_id)
+            self._tick_productivity(run_id)
+            self._animate_dot(run_id)
+            threading.Thread(
+                target=self.move_logic,
+                args=(run_id, self._stop_event, pyautogui.position()),
+                daemon=True,
+            ).start()
 
     def stop_movement(self):
+        if not self.is_running:
+            return  # ESC / tray "Stop" while idle — nothing to abort
         self.is_running = False
+        self._stop_event.set()
         self.start_time = None
         self._flicker_status("◈  ABORTED", NEON_RED)
         self.timer_label.configure(text="")
@@ -649,6 +682,7 @@ class OrbitApp(ctk.CTk):
 
     def on_close(self):
         self.is_running = False
+        self._stop_event.set()
         try:
             self.tray_icon.stop()
         except Exception:

@@ -3,3 +3,4 @@ pyautogui==0.9.54
 darkdetect==0.8.0
 Pillow==12.1.1
 pystray==0.19.5
+pywinstyles==1.8
